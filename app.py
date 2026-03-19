@@ -1,13 +1,15 @@
 import streamlit as st
 from docx import Document
+from docx.shared import Cm, Pt
+from docx.enum.text import WD_TAB_ALIGNMENT, WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from openai import OpenAI
 import os
 import re
 import time
 import json
 from io import BytesIO
-from docx.shared import Cm, Pt
-from docx.enum.text import WD_TAB_ALIGNMENT
 from agents import (
     FORMATTING_AGENT_PROMPT,
     AGENT_1_PROMPT,
@@ -107,7 +109,6 @@ def extract_question_numbers(text):
             v = int(n)
         except ValueError:
             continue
-        # Conservative upper bound for GCSE question numbering
         if v <= 50:
             nums.add(n)
     return sorted(nums, key=lambda x: int(x))
@@ -133,14 +134,12 @@ def detect_question_structure(text):
     Returns a structure the mark scheme generator uses to avoid hallucinating
     or skipping questions at any level of the hierarchy.
     """
-    # Roman numeral pattern — must be checked BEFORE the single-letter (a)/(b) pattern
-    # so that (i), (ii), (iii) etc. are not mistakenly treated as lettered parts.
     ROMAN_RE = re.compile(
         r"^\s*\((i{1,4}|iv|vi{0,3}|ix|xi{0,3}|x{1,3})\)\s", re.IGNORECASE
     )
     PART_RE = re.compile(r"^\s*\(([a-z])\)\s")
 
-    structure = {}          # {qnum: {"parts": {letter: set(roman_subparts)}}}
+    structure = {}
     current_q = None
     current_part = None
 
@@ -148,7 +147,6 @@ def detect_question_structure(text):
         if "Total for question" in line:
             continue
 
-        # ── Main question number ──────────────────────────────────────────────
         m_main = re.match(r"^\s*(\d+)\s*(?=[.(A-Za-z])", line)
         if m_main:
             v = int(m_main.group(1))
@@ -156,12 +154,11 @@ def detect_question_structure(text):
                 current_q = m_main.group(1)
                 current_part = None
                 structure.setdefault(current_q, {"parts": {}})
-            continue  # a main-number line won't also be a sub-part
+            continue
 
         if current_q is None:
             continue
 
-        # ── Roman numeral sub-part (i), (ii) … ───────────────────────────────
         m_roman = ROMAN_RE.match(line)
         if m_roman and current_part is not None:
             roman = m_roman.group(1).lower()
@@ -169,17 +166,12 @@ def detect_question_structure(text):
             structure[current_q]["parts"][current_part].add(roman)
             continue
 
-        # ── Lettered sub-part (a), (b) … ─────────────────────────────────────
         m_part = PART_RE.match(line)
         if m_part:
             letter = m_part.group(1)
-            # Skip if the single letter is one that only appears as a roman numeral
-            # (i, v, x) — those are handled above when they follow a letter part.
-            # Here we accept them as letter parts only if we have no current_part yet.
             structure[current_q]["parts"].setdefault(letter, set())
             current_part = letter
 
-    # Build the serialisable result
     result = []
     for qnum, info in structure.items():
         parts_list = []
@@ -194,10 +186,6 @@ def detect_question_structure(text):
 
 
 def read_spec_text(spec_txt_file, spec_docx_file, pasted_spec_text):
-    """
-    Build a single specification text string from the available inputs.
-    This is used both for coverage checks and to guide the multi-agent revision.
-    """
     parts = []
     if spec_txt_file is not None:
         try:
@@ -217,14 +205,37 @@ def read_spec_text(spec_txt_file, spec_docx_file, pasted_spec_text):
 
 def improve_worksheet(text):
     prompt = """
-Improve clarity and GCSE realism.
-Preserve numbering.
-Remove topic headers.
-Ensure mixed difficulty.
-Fix spacing between value and unit.
-Keep mark formatting like (2).
-Do NOT rewrite structure.
-Do NOT add answer lines.
+You are improving a GCSE worksheet to match a professional exam-standard format.
+Follow these rules EXACTLY:
+
+CONTENT RULES:
+1. Make every question clear and unambiguous. Remove AI-sounding or strange wording.
+2. Questions should replicate real GCSE exam questions in style and difficulty.
+3. Ensure a MIX of question types: 1-mark recall, 2-3 mark describe, 3-4 mark explain, calculation questions.
+4. Include at least one application-style question with a named scenario (e.g. "A student, Sarah, connects a circuit...").
+5. Do NOT repeat questions or topics.
+6. Ensure every multi-mark question has appropriate cognitive demand.
+7. Numbers in question stems should be written as WORDS (e.g. "two" not "2"), EXCEPT for: physical values (e.g. "15 m/s"), equations, or units.
+
+FORMATTING RULES:
+8. Remove ALL topic headers (e.g. "Work and Energy Transfers", "Forces", "Section A").
+9. Remove ALL formatting symbols: *, #, bullet points, dashes used as headers.
+10. In any question context/stem text, replace " = " and " - " used as label separators with ": ".
+    Example: "Work Done = Force × Distance" in a context line → "Work done: force × distance"
+11. Question numbering must be consistent: 1, 2, 3 ... (a), (b), (c) ... (i), (ii), (iii).
+    - Main question numbers should NOT have a dot (use "1" not "1.")
+12. Do NOT add answer lines — these are handled separately.
+13. Keep mark allocations exactly as shown, e.g. (2).
+14. Ensure there is NO space between sub-parts (a), (b), (c) of the SAME question.
+15. There SHOULD be a blank line between separate main questions (1, 2, 3...).
+16. Do NOT completely rewrite questions — only improve clarity and GCSE realism.
+17. If a question has sub-parts (a)(i), (a)(ii), the letter (a) alone should NOT be on its own line
+    if it only introduces roman-numeral sub-parts. Use the format:
+    (a) (i) question text here   (1)
+        (ii) question text here  (2)
+
+OUTPUT:
+Return the improved worksheet only. No commentary or explanations.
 """
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -236,12 +247,11 @@ Do NOT add answer lines.
     )
     return add_answer_lines(clean_text(response.choices[0].message.content))
 
+
 def generate_markscheme(text, mismatch_info: str = None):
     """
     Generate or regenerate a GCSE mark scheme from worksheet text.
-    If `mismatch_info` is provided (a plain-English description of what is wrong
-    in the existing mark scheme), it is injected into the prompt so the model
-    knows exactly what to fix rather than starting blind.
+    If `mismatch_info` is provided it is injected so the model knows what to fix.
     """
     mismatch_block = ""
     if mismatch_info:
@@ -251,48 +261,64 @@ CRITICAL — SPECIFIC ISSUES TO FIX IN THIS REGENERATION:
 You MUST resolve every issue listed above. Do not reproduce these errors.
 """
     prompt = f"""
-You are generating a **fully explicit GCSE Physics mark scheme** from a worksheet.
+You are generating a fully explicit GCSE-style mark scheme from a worksheet.
 {mismatch_block}
 
-You MUST:
-- Write a marking scheme entry for **every question and every sub-part** that appears in the worksheet (e.g. if the worksheet has 1 (a), (b), (c) you must have 1 (a), (b), (c) in the mark scheme).
-- Never skip any sub-questions.
-- Never use vague placeholders like "Working step (1)" or "Answer (1)".
+CONTENT RULES:
+1. Write a marking entry for EVERY question and EVERY sub-part in the worksheet.
+2. NEVER skip any sub-question.
+3. NEVER use vague placeholders like "Working step (1)" or "Answer (1)".
+4. For CALCULATION questions:
+   - Show the actual equation, numerical substitution, and final answer with units.
+   - Do NOT award a mark for giving the equation alone (guideline rule).
+   - Award marks for correct substitution (1) and correct answer with units (1).
+   - Example: "a = (v - u) / t = (0 - 20) / 5 = -4 m/s² (1)(1)"
+5. For NON-CALCULATION questions:
+   - Give clear, specific marking points.
+   - Allow reasonable alternatives: "OR" / "Accept..."
+   - If 3+ possible answers exist, use: "Any [one/two/three] from:" followed by bullet points.
+   - Use "OR" when only two alternatives exist.
+6. Each mark MUST be a whole number — use (1) only. Never (2) for a single point.
+7. Only the FIRST letter of each marking sentence should be capitalised.
+   - WRONG: "Force = Mass × Acceleration (1)"
+   - CORRECT: "Force = mass × acceleration (1)"
+8. Sentences longer than 3-4 words MUST end with a full stop before the (1).
+   Short labels may omit the full stop.
+9. Any useful side note should be in italics formatting — prefix with [NOTE]:
+   e.g. "[NOTE]: Accept velocity instead of speed"
 
-For **calculation questions**:
-- Always show the **actual equation**, the **numerical substitution**, and the **final numerical answer with units**.
-- Award method and answer marks explicitly, for example:
-  1 (a) v = f × λ (1)
-      v = 2.5 × 0.8 = 2.0 m/s (1)
-- Do NOT write generic text like "Working step (1)" or "Next step (1)" – use the real working that matches the question.
+FORMATTING RULES:
+10. Bold question numbers: "1", "2" etc. (just the number).
+11. Sub-part labels in brackets: (a), (b), (c), (i), (ii).
+12. NO space between marking points WITHIN the same question part.
+    Each mark point is on its own line but with NO blank line between them.
+13. A SMALL space (one blank line) between DIFFERENT sub-parts (a)→(b)→(c).
+14. A SMALL space between the last mark of one question and the Total line.
+15. Include a "Total for question X = Y marks" line after each main question.
+16. At the very END of the mark scheme, add on its own line:
+    "Total marks for question paper: Z"
+    where Z is the sum of all question totals.
 
-For **non-calculation questions**:
-- Give clear marking points that state the acceptable ideas, not just "Answer (1)".
-- Provide at least as many distinct marking points as there are marks.
-- Where appropriate, allow reasonable alternative phrasings using "OR" / "Accept ...".
+STRUCTURE EXAMPLE:
+1 (a) Correct substitution shown. (1)
+      Correct answer = 4.0 m/s² (allow ±0.1). (1)
+
+(b) Any two from: (2)
+    • Reduces friction. (1)
+    • Increases driving force. (1)
+    • Reduces mass of vehicle. (1)
+
+(c) The current decreases. (1)
+    [NOTE]: Accept "resistance increases so current decreases"
+
+(Total for question 1 = 5 marks)
 
 Question mapping and numbering:
-- You will be given a DETECTED QUESTION STRUCTURE. You MUST:
-  - Use exactly this set of question numbers and sub-parts.
-  - Not invent any new question numbers or sub-parts.
-  - Not omit any question or sub-part from the mark scheme.
-- Treat numbers inside sentences (e.g. "2.0 m/s", "5 kg") as data, NOT as question numbers.
+- Use EXACTLY the question numbers and sub-parts from the DETECTED QUESTION STRUCTURE below.
+- Do NOT invent new question numbers or sub-parts.
+- Do NOT omit any question or sub-part.
+- Treat numbers inside sentences (e.g. "2.0 m/s", "5 kg") as data NOT question numbers.
 - Only start a new question number at the beginning of a line.
-
-Formatting requirements (follow this structure):
-
-1 (a) [first valid marking point] (1)
-      [second valid marking point / step] (1)
-(b) [first valid marking point] (1)
-      [second valid marking point] (1)
-(c) [etc...]
-(Total for question 1 = 6 marks)
-
-Rules:
-- Only (1) marks – no fractional marks.
-- Show exactly where each mark is gained.
-- Include a "Total for question X = Y marks" line for each numbered question.
-- End with a final "Total for paper = Z marks" line.
 """
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -329,17 +355,14 @@ def run_agent(prompt, content: str) -> str:
 def run_full_revision_via_agents(worksheet_text: str, markscheme_text: str, spec_text: str):
     """
     Run the current worksheet + mark scheme through the full multi-agent
-    pipeline (Agents 1–5) to repair structural issues such as missing
-    question numbers or misaligned scope.
+    pipeline (Agents 1–5) to repair structural issues.
     """
-    # Agent 1–3 operate on combined worksheet/markscheme text
     combined_ws_ms = f"WORKSHEET:\n{worksheet_text}\n\nMARK SCHEME:\n{markscheme_text}"
 
     report1 = run_agent(AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
     report2 = run_agent(AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
     report3 = run_agent(AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
 
-    # Agent 4 uses scope as well
     coverage_input = f"""WORKSHEET AND MARK SCHEME:
 {combined_ws_ms}
 
@@ -348,7 +371,6 @@ INTENDED SCOPE:
 """
     report4 = run_agent(AGENT_4_PROMPT, coverage_input)
 
-    # Agent 5: final revision with all reports
     combined_input = f"""ORIGINAL WORKSHEET:
 {worksheet_text}
 
@@ -377,18 +399,11 @@ AGENT 4 REPORT:
 def parse_revised_output(text: str):
     """
     Split the Agent 5 result into revised worksheet and mark scheme.
-
-    Tries three strategies in order:
-    1. Exact string match on the canonical markers.
-    2. Case-insensitive / whitespace-tolerant regex search (handles slight
-       formatting variations the model sometimes introduces).
-    3. Safe fallback — returns (None, None) so the caller can keep the
-       originals instead of silently corrupting them.
+    Tries three strategies, falls back to (None, None) on failure.
     """
     ws_marker = "--- REVISED WORKSHEET ---"
     ms_marker = "--- REVISED MARK SCHEME ---"
 
-    # ── Strategy 1: exact match ───────────────────────────────────────────────
     ws_idx = text.find(ws_marker)
     ms_idx = text.find(ms_marker)
     if ws_idx != -1 and ms_idx != -1:
@@ -396,7 +411,6 @@ def parse_revised_output(text: str):
         ms_start = ms_idx + len(ms_marker)
         return text[ws_start:ms_idx].strip(), text[ms_start:].strip()
 
-    # ── Strategy 2: fuzzy regex (tolerates extra dashes, varied spacing) ─────
     ws_match = re.search(r"-{2,}\s*REVISED\s+WORKSHEET\s*-{2,}", text, re.IGNORECASE)
     ms_match = re.search(r"-{2,}\s*REVISED\s+MARK\s+SCHEME\s*-{2,}", text, re.IGNORECASE)
     if ws_match and ms_match:
@@ -406,14 +420,12 @@ def parse_revised_output(text: str):
         markscheme_part = text[ms_start:].strip()
         return worksheet_part, markscheme_part
 
-    # ── Strategy 3: safe fallback — signal caller to keep originals ───────────
     return None, None
 
 
 def run_formatting_agent(worksheet_text):
     """
-    Call the FormattingAgent to obtain structured formatting instructions
-    for an already-enhanced worksheet.
+    Call the FormattingAgent to obtain structured formatting instructions.
     """
     cleaned = strip_answer_lines(clean_text(worksheet_text))
     response = client.chat.completions.create(
@@ -425,7 +437,6 @@ def run_formatting_agent(worksheet_text):
         temperature=0,
     )
     raw = response.choices[0].message.content.strip()
-    # GPT sometimes wraps JSON in markdown fences — strip them before parsing.
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw)
     try:
@@ -439,13 +450,11 @@ def run_formatting_agent(worksheet_text):
 
 def render_formatted_preview(spec):
     """
-    Render a structured, exam-style preview in Streamlit based on
-    FormattingAgent instructions.
+    Render a structured, exam-style preview in Streamlit.
     """
     lines = spec.get("lines", [])
     st.markdown("### Formatted Worksheet Preview")
 
-    # Constrain width to simulate A4 column
     st.markdown(
         """
 <style>
@@ -459,36 +468,26 @@ def render_formatted_preview(spec):
 .q-line {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     font-family: Arial, sans-serif;
     font-size: 11pt;
 }
-.q-main {
-    margin-top: 10px;
-}
+.q-main { margin-top: 14px; }
 .q-indent-0 { padding-left: 0; }
-.q-indent-1 { padding-left: 24px; }
-.q-indent-2 { padding-left: 48px; }
-.q-text {
-    white-space: pre-wrap;
-    flex: 1;
-    padding-right: 12px;
-}
-.q-marks {
-    min-width: 40px;
-    text-align: right;
-    font-weight: bold;
-}
-.q-total {
-    margin-top: 8px;
-    font-weight: bold;
-}
+.q-indent-1 { padding-left: 28px; }
+.q-indent-2 { padding-left: 52px; }
+.q-text { white-space: pre-wrap; flex: 1; padding-right: 12px; }
+.q-marks { min-width: 40px; text-align: right; font-weight: bold; }
+.q-total { margin-top: 6px; margin-bottom: 6px; font-weight: bold; }
 .answer-line {
     border-bottom: 1px solid #666;
-    margin: 2px 0 4px 0;
+    margin: 3px 0;
+    height: 18px;
 }
-.answer-indent-1 { margin-left: 24px; margin-right: 40px; }
-.answer-indent-2 { margin-left: 48px; margin-right: 40px; }
+.answer-indent-0 { margin-left: 0px; margin-right: 44px; }
+.answer-indent-1 { margin-left: 28px; margin-right: 44px; }
+.answer-indent-2 { margin-left: 52px; margin-right: 44px; }
+.q-bold { font-weight: bold; }
 </style>
         """,
         unsafe_allow_html=True,
@@ -506,42 +505,41 @@ def render_formatted_preview(spec):
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
-        # Vertical spacing before new main question
-        main_class = " q-main" if qnum != last_q and not is_total else ""
+        main_class = " q-main" if (qnum != last_q and indent_level == 0 and not is_total) else ""
 
         if is_total:
             html_lines.append(
-                f'<div class="q-line q-total q-indent-0{main_class}">'
+                f'<div class="q-line q-total q-indent-0">'
                 f'<div class="q-text">(Total for question {qnum} = {marks} marks)</div>'
                 f'</div>'
             )
             last_q = qnum
             continue
 
-        # Compose left label + text
-        label_prefix = ""
+        # Compose label
         if indent_level == 0 and qnum:
-            label_prefix = f"{qnum} "
+            label_html = f'<span class="q-bold">{qnum}</span>&nbsp;&nbsp;'
         elif indent_level == 1 and part_label:
-            label_prefix = f"{part_label} "
+            label_html = f'<span class="q-bold">{part_label}</span>&nbsp;'
         elif indent_level >= 2 and (subpart_label or part_label):
-            label_prefix = f"{subpart_label or part_label} "
+            lbl = subpart_label or part_label
+            label_html = f'<span class="q-bold">{lbl}</span>&nbsp;'
+        else:
+            label_html = ""
 
         html_lines.append(
             f'<div class="q-line q-indent-{indent_level}{main_class}">'
-            f'<div class="q-text">{label_prefix}{question_text}</div>'
+            f'<div class="q-text">{label_html}{question_text}</div>'
             f'<div class="q-marks">{f"({marks})" if marks else ""}</div>'
             f'</div>'
         )
 
-        # Answer lines (proportional to marks, max 4)
+        # Answer lines based on marks
         if marks and marks > 0:
-            num_lines = min(int(marks), 4)
+            num_lines = min(int(marks) + 1, 5)
             ans_class = f"answer-indent-{min(indent_level, 2)}"
             for _ in range(num_lines):
-                html_lines.append(
-                    f'<div class="answer-line {ans_class}"></div>'
-                )
+                html_lines.append(f'<div class="answer-line {ans_class}"></div>')
 
         last_q = qnum
 
@@ -549,35 +547,127 @@ def render_formatted_preview(spec):
     st.markdown("\n".join(html_lines), unsafe_allow_html=True)
 
 
+# ================================================================
+# DOCX HELPERS
+# ================================================================
+
+def _set_run_font(run, bold=False, size_pt=11):
+    """Apply Arial 11pt and optional bold to a run."""
+    run.font.name = "Arial"
+    run.font.size = Pt(size_pt)
+    run.bold = bold
+    # Also set font in rPr for compatibility
+    rPr = run._r.get_or_add_rPr()
+    rFonts = OxmlElement('w:rFonts')
+    rFonts.set(qn('w:ascii'), 'Arial')
+    rFonts.set(qn('w:hAnsi'), 'Arial')
+    rPr.insert(0, rFonts)
+
+
+def _add_answer_underline(document, left_indent_cm, content_width_cm, num_lines=3):
+    """
+    Add answer lines as paragraphs with a bottom border, indented to match the question level.
+    Using bottom border approach gives a clean professional line.
+    """
+    for _ in range(num_lines):
+        p = document.add_paragraph()
+        pf = p.paragraph_format
+        pf.left_indent = Cm(left_indent_cm)
+        pf.right_indent = Cm(0.5)
+        pf.space_before = Pt(0)
+        pf.space_after = Pt(4)
+
+        # Add bottom border via XML for a clean answer line
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement('w:pBdr')
+        bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single')
+        bottom.set(qn('w:sz'), '4')   # 0.5pt border
+        bottom.set(qn('w:space'), '1')
+        bottom.set(qn('w:color'), '000000')
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+
+        # Empty run to set font
+        run = p.add_run("")
+        run.font.name = "Arial"
+        run.font.size = Pt(11)
+
+
 def build_formatted_docx(spec):
     """
     Build a fully formatted A4 Word document (.docx) based on
-    FormattingAgent instructions.
+    FormattingAgent instructions, following the GCSE guideline:
+    - A4, Moderate margins (top/bottom 2.54 cm, left/right 1.91 cm)
+    - Arial 11pt
+    - Bold question numbers and part labels
+    - Right-aligned marks
+    - Answer lines via bottom border
+    - Space between questions, no space between sub-parts
     """
     document = Document()
 
-    # Page setup: A4, 2.5 cm margins
+    # --- Page setup: A4, Moderate margins ---
     section = document.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21.0)
-    section.top_margin = Cm(2.5)
-    section.bottom_margin = Cm(2.5)
-    section.left_margin = Cm(2.5)
-    section.right_margin = Cm(2.5)
+    section.top_margin = Cm(2.54)
+    section.bottom_margin = Cm(2.54)
+    section.left_margin = Cm(1.91)
+    section.right_margin = Cm(1.91)
 
-    # Base font: Arial 11
+    # --- Base style: Arial 11 ---
     style = document.styles["Normal"]
-    font = style.font
-    font.name = "Arial"
-    font.size = Pt(11)
+    style.font.name = "Arial"
+    style.font.size = Pt(11)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
 
-    paper_total = spec.get("paper_total_marks")
+    # Usable content width (for tab stop calculation)
+    content_width = section.page_width - section.left_margin - section.right_margin
+    # Right-aligned marks tab stop: near right margin
+    mark_tab = content_width - Cm(0.3)
+
+    # Indentation levels (cm) — how far the TEXT starts
+    TEXT_INDENT = [Cm(0.8), Cm(1.5), Cm(2.3)]
+    # Left hanging indent per level (where the LABEL starts)
+    LEFT_INDENT = [Cm(0.0), Cm(0.8), Cm(1.5)]
+
     lines = spec.get("lines", [])
-
-    # Tab stop for right-aligned marks (slightly inside right margin)
-    mark_tab_pos = section.page_width - section.right_margin - Cm(0.5)
-
+    paper_total = spec.get("paper_total_marks")
     last_q = None
+
+    def add_question_paragraph(label, label_bold, text_content, marks, indent_level, space_before_pt):
+        p = document.add_paragraph()
+        pf = p.paragraph_format
+        pf.space_before = Pt(space_before_pt)
+        pf.space_after = Pt(0)
+
+        # Hanging indent: label sticks left, text indented right
+        li = LEFT_INDENT[indent_level]
+        ti = TEXT_INDENT[indent_level]
+        pf.left_indent = li
+        pf.first_line_indent = -(ti - li)
+
+        # Tab stops: text at (ti - li) from left, marks at far right
+        pf.tab_stops.clear_all()
+        pf.tab_stops.add_tab_stop(ti - li, WD_TAB_ALIGNMENT.LEFT)
+        pf.tab_stops.add_tab_stop(mark_tab, WD_TAB_ALIGNMENT.RIGHT)
+
+        if label:
+            r = p.add_run(label)
+            _set_run_font(r, bold=label_bold)
+            p.add_run("\t")
+
+        r2 = p.add_run(text_content)
+        _set_run_font(r2, bold=False)
+
+        if marks:
+            p.add_run("\t")
+            r3 = p.add_run(f"({marks})")
+            _set_run_font(r3, bold=True)
+
+        return p
 
     for line in lines:
         qnum = line.get("question_number")
@@ -588,77 +678,184 @@ def build_formatted_docx(spec):
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
-        # New main question spacing
-        p = document.add_paragraph()
-        pf = p.paragraph_format
-        if qnum != last_q and last_q is not None and not is_total:
-            pf.space_before = Pt(10)
-        pf.space_after = Pt(2)
-
-        # Indentation hierarchy
-        if indent_level == 0:
-            text_tab_pos = Cm(1.0)
-        elif indent_level == 1:
-            text_tab_pos = Cm(1.5)
-        else:
-            text_tab_pos = Cm(2.5)
-
-        pf.left_indent = Cm(0)
-        tab_stops = pf.tab_stops
-        tab_stops.clear_all()
-        tab_stops.add_tab_stop(text_tab_pos, WD_TAB_ALIGNMENT.LEFT)
-        tab_stops.add_tab_stop(mark_tab_pos, WD_TAB_ALIGNMENT.RIGHT)
-
-        # Totals: bold, left aligned, no right-aligned mark column required
+        # --- Total for question line ---
         if is_total:
-            run = p.add_run(f"(Total for question {qnum} = {marks} marks)")
-            run.bold = True
+            p = document.add_paragraph()
+            pf = p.paragraph_format
+            pf.space_before = Pt(4)
+            pf.space_after = Pt(10)
+            r = p.add_run(f"(Total for question {qnum} = {marks} marks)")
+            _set_run_font(r, bold=True)
             last_q = qnum
             continue
 
-        # Compose "label    text            (marks)" line using tab stops
-        label_prefix = ""
+        # --- Determine spacing before this line ---
+        if indent_level == 0:
+            # New main question: add space above (except the very first)
+            sp_before = 14 if (last_q is not None and qnum != last_q) else 0
+        else:
+            # Sub-parts: no extra space
+            sp_before = 0
+
+        # --- Compose label ---
         if indent_level == 0 and qnum:
-            label_prefix = f"{qnum}"
+            label = qnum
+            label_bold = True
         elif indent_level == 1 and part_label:
-            label_prefix = part_label
+            label = part_label
+            label_bold = True
         elif indent_level >= 2 and (subpart_label or part_label):
-            label_prefix = subpart_label or part_label
+            label = subpart_label or part_label
+            label_bold = True
+        else:
+            label = ""
+            label_bold = False
 
-        if label_prefix:
-            p.add_run(label_prefix)
-        p.add_run("\t")
-        p.add_run(question_text)
-        if marks:
-            p.add_run("\t")
-            mark_run = p.add_run(f"({marks})")
-            mark_run.bold = True
+        add_question_paragraph(
+            label=label,
+            label_bold=label_bold,
+            text_content=question_text,
+            marks=marks,
+            indent_level=min(indent_level, 2),
+            space_before_pt=sp_before,
+        )
 
-        # Answer lines (full-width across text column, capped at 4)
+        # --- Answer lines ---
         if marks and marks > 0:
-            num_lines = min(int(marks), 4)
-            for _ in range(num_lines):
-                lp = document.add_paragraph()
-                lpf = lp.paragraph_format
-                lpf.left_indent = text_tab_pos
-                lpf.space_after = Pt(2)
-                # Use a consistent underline run that stops before right margin
-                underline_run = lp.add_run("_" * 80)
+            m = int(marks)
+            # Number of answer lines based on marks
+            if m == 1:
+                num_ans = 2
+            elif m == 2:
+                num_ans = 3
+            elif m == 3:
+                num_ans = 4
+            else:
+                num_ans = 5
+
+            ans_indent = TEXT_INDENT[min(indent_level, 2)].cm
+            _add_answer_underline(document, ans_indent, content_width.cm, num_ans)
 
         last_q = qnum
 
-    # Final total for paper, if supplied
+    # --- Final total for paper ---
     if paper_total:
         p = document.add_paragraph()
         pf = p.paragraph_format
-        pf.space_before = Pt(12)
-        total_run = p.add_run(f"Total for paper = {paper_total} marks")
-        total_run.bold = True
+        pf.space_before = Pt(16)
+        pf.space_after = Pt(0)
+        r = p.add_run(f"Total for paper = {paper_total} marks")
+        _set_run_font(r, bold=True)
 
     bio = BytesIO()
     document.save(bio)
     bio.seek(0)
     return bio
+
+
+def build_markscheme_docx(markscheme_text: str) -> BytesIO:
+    """
+    Build a formatted A4 Word document for the mark scheme, following
+    the GCSE guideline:
+    - A4, Moderate margins
+    - Arial 11pt
+    - Bold question numbers
+    - Each (1) mark on its own line
+    - No space between marks within a part
+    - Small space between sub-parts
+    - Total marks for question paper line at the end
+    """
+    document = Document()
+
+    # --- Page setup ---
+    section = document.sections[0]
+    section.page_height = Cm(29.7)
+    section.page_width = Cm(21.0)
+    section.top_margin = Cm(2.54)
+    section.bottom_margin = Cm(2.54)
+    section.left_margin = Cm(1.91)
+    section.right_margin = Cm(1.91)
+
+    # --- Base style ---
+    style = document.styles["Normal"]
+    style.font.name = "Arial"
+    style.font.size = Pt(11)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
+
+    lines = markscheme_text.split("\n")
+
+    # Patterns to detect structure
+    MAIN_Q_RE = re.compile(r"^\s*(\d+)\s")
+    PART_RE = re.compile(r"^\s*\(([a-z])\)")
+    ROMAN_RE = re.compile(r"^\s*\((i{1,4}|iv|vi{0,3}|ix|xi{0,3}|x{1,3})\)", re.IGNORECASE)
+    TOTAL_Q_RE = re.compile(r"\(Total for question", re.IGNORECASE)
+    TOTAL_PAPER_RE = re.compile(r"Total marks for question paper", re.IGNORECASE)
+    TOTAL_PAPER_ALT = re.compile(r"Total for paper\s*=", re.IGNORECASE)
+
+    prev_was_part = False
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        p = document.add_paragraph()
+        pf = p.paragraph_format
+        pf.space_after = Pt(0)
+
+        # Total for paper (end line)
+        if TOTAL_PAPER_RE.search(line) or TOTAL_PAPER_ALT.search(line):
+            pf.space_before = Pt(14)
+            r = p.add_run(line)
+            _set_run_font(r, bold=True)
+            continue
+
+        # Total for question line
+        if TOTAL_Q_RE.search(line):
+            pf.space_before = Pt(4)
+            pf.space_after = Pt(8)
+            r = p.add_run(line)
+            _set_run_font(r, bold=True)
+            prev_was_part = False
+            continue
+
+        # New sub-part line (a), (b), (i), (ii) — small space before
+        is_part_line = (PART_RE.match(line) or ROMAN_RE.match(line))
+        is_main_q = MAIN_Q_RE.match(line)
+
+        if is_main_q:
+            pf.space_before = Pt(10) if prev_was_part else Pt(0)
+            pf.left_indent = Cm(0)
+            # Bold the question number
+            m = MAIN_Q_RE.match(line)
+            q_num = m.group(1)
+            rest = line[m.end():]
+            r1 = p.add_run(q_num + " ")
+            _set_run_font(r1, bold=True)
+            r2 = p.add_run(rest)
+            _set_run_font(r2, bold=False)
+            prev_was_part = False
+
+        elif is_part_line:
+            pf.space_before = Pt(4) if prev_was_part else Pt(0)
+            pf.left_indent = Cm(0.8)
+            r = p.add_run(line)
+            _set_run_font(r, bold=False)
+            prev_was_part = True
+
+        else:
+            # Continuation of a mark point (indented under its parent)
+            pf.space_before = Pt(0)
+            pf.left_indent = Cm(1.5)
+            r = p.add_run(line)
+            _set_run_font(r, bold=False)
+
+    bio = BytesIO()
+    document.save(bio)
+    bio.seek(0)
+    return bio
+
 
 # ---------------- MAIN ----------------
 
@@ -668,28 +865,25 @@ if run_button and worksheet_file:
     status = st.empty()
 
     status.text("Reading files...")
-    progress.progress(20)
-    time.sleep(0.3)
+    progress.progress(10)
+    time.sleep(0.2)
 
     worksheet_text = extract_docx(worksheet_file)
     markscheme_text = extract_docx(markscheme_file) if markscheme_file else ""
     spec_text = read_spec_text(spec_txt, spec_docx, pasted_spec)
 
-    status.text("Improving worksheet...")
-    progress.progress(50)
+    status.text("Step 2: Cleaning & enhancing worksheet...")
+    progress.progress(30)
     improved_ws = improve_worksheet(worksheet_text)
 
-    status.text("Generating / Improving mark scheme...")
-    progress.progress(80)
-    # Use the improved worksheet (not the raw original) so question numbering
-    # and wording in the mark scheme matches what was actually enhanced.
+    status.text("Step 3: Generating / improving mark scheme...")
+    progress.progress(60)
     improved_ms = generate_markscheme(improved_ws)
 
     progress.progress(100)
     status.text("Complete.")
-    st.success("Enhancement Complete")
+    st.success("Enhancement complete — see outputs below.")
 
-    # Persist results so they survive future reruns (e.g. clicking checkboxes/buttons)
     st.session_state["worksheet_text"] = worksheet_text
     st.session_state["markscheme_text"] = markscheme_text
     st.session_state["improved_ws"] = improved_ws
@@ -705,20 +899,21 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
 
     # ---------------- OUTPUT ----------------
 
-    st.subheader("Enhanced Worksheet")
-    st.text_area("Worksheet Output", improved_ws, height=400, key="ws_output")
+    col1, col2 = st.columns(2)
 
-    st.subheader("Enhanced Mark Scheme")
-    st.text_area("Mark Scheme Output", improved_ms, height=400, key="ms_output")
+    with col1:
+        st.subheader("Enhanced Worksheet")
+        st.text_area("Worksheet Output", improved_ws, height=450, key="ws_output")
+
+    with col2:
+        st.subheader("Enhanced Mark Scheme")
+        st.text_area("Mark Scheme Output", improved_ms, height=450, key="ms_output")
 
     # ---------------- VALIDATION ----------------
 
     with st.expander("🔎 QA Validation Report"):
 
         misaligned = False
-
-        # Use the enhanced mark scheme for validation where available.
-        # Compare against improved_ws (not the raw original) for consistency.
         validation_ms_text = improved_ms or markscheme_text
 
         if validation_ms_text:
@@ -738,11 +933,9 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             st.error("⚠ Fractional marks detected.")
             misaligned = True
 
-        # Question Number Alignment — compare improved worksheet vs improved mark scheme
         ws_questions = extract_question_numbers(improved_ws)
         ms_questions = extract_question_numbers(validation_ms_text)
 
-        # Build a specific description of what is mismatched to pass into regeneration
         mismatch_details = []
         if ws_questions != ms_questions:
             missing_from_ms = [q for q in ws_questions if q not in ms_questions]
@@ -783,7 +976,6 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
                         )
                     else:
                         st.session_state["improved_ws"] = revised_ws
-                        # Only overwrite mark scheme if Agent 5 actually produced one
                         if revised_ms:
                             st.session_state["improved_ms"] = revised_ms
                         st.success("Worksheet and mark scheme revised via multi-agent pipeline. Scroll up to review.")
@@ -792,8 +984,9 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
         else:
             st.success("Structural checks passed (totals, fractions, numbering).")
 
-    # Offer formatting/export option outside the expander.
-    # We recompute only the structural flags (no extra UI messages here).
+    # ---------------- EXPORT ----------------
+
+    # Recompute flags for export section
     validation_ms_text = improved_ms or markscheme_text
     misaligned_for_export = False
 
@@ -809,29 +1002,48 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
         if ws_questions != ms_questions:
             misaligned_for_export = True
 
-    st.subheader("Formatted Worksheet Export")
+    st.subheader("Export Documents")
     override_ok = True
 
     if misaligned_for_export:
         st.warning(
-            "QA checks found structural issues with totals, fractional marks, or numbering. "
-            "You can still export, but please double‑check the output manually."
+            "QA checks found structural issues. You can still export, but please double-check the output."
         )
         override_ok = st.checkbox(
-            "Proceed with formatting/export despite QA warnings",
+            "Proceed with export despite QA warnings",
             key="fmt_override",
         )
 
-    if override_ok and st.button("Generate Formatted Worksheet (.docx)", key="fmt_main"):
-        try:
-            fmt_spec = run_formatting_agent(improved_ws)
-            render_formatted_preview(fmt_spec)
-            docx_bytes = build_formatted_docx(fmt_spec)
-            st.download_button(
-                "Download A4 Word Worksheet (.docx)",
-                data=docx_bytes,
-                file_name="gcse_worksheet_formatted.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-        except Exception as e:
-            st.error(f"FormattingAgent or export failed: {e}")
+    if override_ok:
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            if st.button("Generate Formatted Worksheet (.docx)", key="fmt_ws"):
+                try:
+                    with st.spinner("Formatting worksheet..."):
+                        fmt_spec = run_formatting_agent(improved_ws)
+                    render_formatted_preview(fmt_spec)
+                    docx_bytes = build_formatted_docx(fmt_spec)
+                    st.download_button(
+                        "⬇ Download Worksheet (.docx)",
+                        data=docx_bytes,
+                        file_name="gcse_worksheet_formatted.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                except Exception as e:
+                    st.error(f"Worksheet export failed: {e}")
+
+        with col_b:
+            if st.button("Download Mark Scheme (.docx)", key="fmt_ms"):
+                try:
+                    ms_to_export = st.session_state.get("improved_ms", improved_ms)
+                    ms_bytes = build_markscheme_docx(ms_to_export)
+                    st.download_button(
+                        "⬇ Download Mark Scheme (.docx)",
+                        data=ms_bytes,
+                        file_name="gcse_markscheme_formatted.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                    st.success("Mark scheme ready to download.")
+                except Exception as e:
+                    st.error(f"Mark scheme export failed: {e}")
