@@ -9,6 +9,7 @@ import os
 import re
 import time
 import json
+import base64
 from io import BytesIO
 from agents import (
     FORMATTING_AGENT_PROMPT,
@@ -28,37 +29,69 @@ ANSWER_LINE = "_________________________________________________________________
 # ---------------- STYLE ----------------
 st.markdown("""
 <style>
-html, body, [class*="css"]  {
+html, body, [class*="css"] {
     background-color: #0e1117;
-    color: white;
+    color: #e8e8e8;
 }
-h1 { color: #f39c12; }
+.app-header {
+    background: linear-gradient(90deg, #161b27 0%, #1a2035 100%);
+    border-bottom: 2px solid #f39c12;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+    border-radius: 0 0 8px 8px;
+}
+.app-header img { height: 56px; object-fit: contain; }
+.app-header-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f39c12;
+    letter-spacing: 0.02em;
+}
 .stButton>button {
     background-color: #f39c12;
-    color: black;
-    font-weight: 600;
+    color: #0e1117;
+    font-weight: 700;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    transition: background 0.2s;
 }
+.stButton>button:hover { background-color: #e08e0b; }
+h2, h3, h1 { color: #f39c12; }
+.stDownloadButton>button {
+    background-color: #27ae60;
+    color: white;
+    font-weight: 700;
+    border: none;
+    border-radius: 6px;
+}
+.stDownloadButton>button:hover { background-color: #219a52; }
+hr { border-color: #2a2f3e; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("GCSE Worksheet QA & Validation Studio")
-
-# Logo display (if available)
-logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
-if os.path.exists(logo_path):
-    st.image(logo_path, width=140)
+# ---------------- HEADER ----------------
+_LOGO_B64 = "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"
+st.markdown(f"""
+<div class="app-header">
+    <img src="data:image/png;base64,{_LOGO_B64}" alt="Logo" />
+    <span class="app-header-title">GCSE Worksheet QA Studio</span>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    worksheet_file = st.file_uploader("Upload Worksheet (.docx)", type=["docx"])
-    markscheme_file = st.file_uploader("Upload Mark Scheme (.docx)", type=["docx"])
-
+    st.markdown("### Upload Files")
+    worksheet_file = st.file_uploader("Worksheet (.docx)", type=["docx"])
+    markscheme_file = st.file_uploader("Mark Scheme (.docx)", type=["docx"])
     st.markdown("### Specification (Optional)")
-    spec_txt = st.file_uploader("Upload Spec (.txt)", type=["txt"])
-    spec_docx = st.file_uploader("Upload Spec (.docx)", type=["docx"])
+    spec_txt = st.file_uploader("Spec (.txt)", type=["txt"])
+    spec_docx = st.file_uploader("Spec (.docx)", type=["docx"])
     pasted_spec = st.text_area("Or Paste Specification")
-
-    run_button = st.button("Run Enhancement")
+    run_button = st.button("▶  Run Enhancement", use_container_width=True)
 
 # ---------------- HELPERS ----------------
 
@@ -96,12 +129,6 @@ def keyword_overlap(text1, text2):
     return round((len(words1 & words2) / len(words1)) * 100, 1)
 
 def extract_question_numbers(text):
-    """
-    Extract main question numbers from the start of lines.
-    Avoid mis-reading data like '2500 J' as a question number by:
-    - Only accepting numbers followed by a bracket, dot, or letter.
-    - Ignoring very large numbers that are unrealistic as question numbers.
-    """
     nums = set()
     for m in re.finditer(r"^\s*(\d+)\s*(?=[.(A-Za-z])", text, re.MULTILINE):
         n = m.group(1)
@@ -113,40 +140,19 @@ def extract_question_numbers(text):
             nums.add(n)
     return sorted(nums, key=lambda x: int(x))
 
-def spec_coverage(worksheet_text, spec_text):
-    if not spec_text.strip():
-        return "No specification provided."
-    spec_keywords = list(set(re.findall(r'\b[a-zA-Z]{6,}\b', spec_text.lower())))[:50]
-    covered = [k for k in spec_keywords if k in worksheet_text.lower()]
-    percent = round((len(covered) / len(spec_keywords)) * 100, 1) if spec_keywords else 0
-    return f"Specification keyword coverage (sample-based): {percent}%"
-
-
 def strip_answer_lines(text):
-    """Remove existing answer line placeholders to give FormattingAgent clean question text."""
     lines = text.split("\n")
     return "\n".join([ln for ln in lines if ANSWER_LINE.strip() not in ln.strip()])
 
-
 def detect_question_structure(text):
-    """
-    Detect question numbers, lettered sub-parts, and roman numeral sub-parts.
-    Returns a structure the mark scheme generator uses to avoid hallucinating
-    or skipping questions at any level of the hierarchy.
-    """
-    ROMAN_RE = re.compile(
-        r"^\s*\((i{1,4}|iv|vi{0,3}|ix|xi{0,3}|x{1,3})\)\s", re.IGNORECASE
-    )
+    ROMAN_RE = re.compile(r"^\s*\((i{1,4}|iv|vi{0,3}|ix|xi{0,3}|x{1,3})\)\s", re.IGNORECASE)
     PART_RE = re.compile(r"^\s*\(([a-z])\)\s")
-
     structure = {}
     current_q = None
     current_part = None
-
     for line in text.split("\n"):
         if "Total for question" in line:
             continue
-
         m_main = re.match(r"^\s*(\d+)\s*(?=[.(A-Za-z])", line)
         if m_main:
             v = int(m_main.group(1))
@@ -155,23 +161,19 @@ def detect_question_structure(text):
                 current_part = None
                 structure.setdefault(current_q, {"parts": {}})
             continue
-
         if current_q is None:
             continue
-
         m_roman = ROMAN_RE.match(line)
         if m_roman and current_part is not None:
             roman = m_roman.group(1).lower()
             structure[current_q]["parts"].setdefault(current_part, set())
             structure[current_q]["parts"][current_part].add(roman)
             continue
-
         m_part = PART_RE.match(line)
         if m_part:
             letter = m_part.group(1)
             structure[current_q]["parts"].setdefault(letter, set())
             current_part = letter
-
     result = []
     for qnum, info in structure.items():
         parts_list = []
@@ -183,7 +185,6 @@ def detect_question_structure(text):
             parts_list.append(entry)
         result.append({"question_number": qnum, "parts": parts_list})
     return result
-
 
 def read_spec_text(spec_txt_file, spec_docx_file, pasted_spec_text):
     parts = []
@@ -221,14 +222,14 @@ FORMATTING RULES:
 8. Remove ALL topic headers (e.g. "Work and Energy Transfers", "Forces", "Section A").
 9. Remove ALL formatting symbols: *, #, bullet points, dashes used as headers.
 10. In any question context/stem text, replace " = " and " - " used as label separators with ": ".
-    Example: "Work Done = Force × Distance" in a context line → "Work done: force × distance"
+    Example: "Work Done = Force x Distance" in a context line -> "Work done: force x distance"
 11. Question numbering must be consistent: 1, 2, 3 ... (a), (b), (c) ... (i), (ii), (iii).
     - Main question numbers should NOT have a dot (use "1" not "1.")
-12. Do NOT add answer lines — these are handled separately.
+12. Do NOT add answer lines - these are handled separately.
 13. Keep mark allocations exactly as shown, e.g. (2).
 14. Ensure there is NO space between sub-parts (a), (b), (c) of the SAME question.
 15. There SHOULD be a blank line between separate main questions (1, 2, 3...).
-16. Do NOT completely rewrite questions — only improve clarity and GCSE realism.
+16. Do NOT completely rewrite questions - only improve clarity and GCSE realism.
 17. If a question has sub-parts (a)(i), (a)(ii), the letter (a) alone should NOT be on its own line
     if it only introduces roman-numeral sub-parts. Use the format:
     (a) (i) question text here   (1)
@@ -249,14 +250,10 @@ Return the improved worksheet only. No commentary or explanations.
 
 
 def generate_markscheme(text, mismatch_info: str = None):
-    """
-    Generate or regenerate a GCSE mark scheme from worksheet text.
-    If `mismatch_info` is provided it is injected so the model knows what to fix.
-    """
     mismatch_block = ""
     if mismatch_info:
         mismatch_block = f"""
-CRITICAL — SPECIFIC ISSUES TO FIX IN THIS REGENERATION:
+CRITICAL - SPECIFIC ISSUES TO FIX IN THIS REGENERATION:
 {mismatch_info}
 You MUST resolve every issue listed above. Do not reproduce these errors.
 """
@@ -272,46 +269,29 @@ CONTENT RULES:
    - Show the actual equation, numerical substitution, and final answer with units.
    - Do NOT award a mark for giving the equation alone (guideline rule).
    - Award marks for correct substitution (1) and correct answer with units (1).
-   - Example: "a = (v - u) / t = (0 - 20) / 5 = -4 m/s² (1)(1)"
+   - Example: "a = (v - u) / t = (0 - 20) / 5 = -4 m/s2 (1)(1)"
 5. For NON-CALCULATION questions:
    - Give clear, specific marking points.
    - Allow reasonable alternatives: "OR" / "Accept..."
    - If 3+ possible answers exist, use: "Any [one/two/three] from:" followed by bullet points.
    - Use "OR" when only two alternatives exist.
-6. Each mark MUST be a whole number — use (1) only. Never (2) for a single point.
+6. Each mark MUST be a whole number - use (1) only. Never (2) for a single point.
 7. Only the FIRST letter of each marking sentence should be capitalised.
-   - WRONG: "Force = Mass × Acceleration (1)"
-   - CORRECT: "Force = mass × acceleration (1)"
 8. Sentences longer than 3-4 words MUST end with a full stop before the (1).
-   Short labels may omit the full stop.
-9. Any useful side note should be in italics formatting — prefix with [NOTE]:
+9. Any useful side note should be prefixed with [NOTE]:
    e.g. "[NOTE]: Accept velocity instead of speed"
 
 FORMATTING RULES:
 10. Bold question numbers: "1", "2" etc. (just the number).
 11. Sub-part labels in brackets: (a), (b), (c), (i), (ii).
 12. NO space between marking points WITHIN the same question part.
-    Each mark point is on its own line but with NO blank line between them.
-13. A SMALL space (one blank line) between DIFFERENT sub-parts (a)→(b)→(c).
+13. A SMALL space (one blank line) between DIFFERENT sub-parts (a)->(b)->(c).
 14. A SMALL space between the last mark of one question and the Total line.
-15. Include a "Total for question X = Y marks" line after each main question.
+15. Include a "(Total for question X is Y marks)" line after each main question.
+    CRITICAL: Use "is" NOT "=" — e.g. "(Total for question 1 is 6 marks)" NOT "(Total for question 1 = 6 marks)"
 16. At the very END of the mark scheme, add on its own line:
     "Total marks for question paper: Z"
     where Z is the sum of all question totals.
-
-STRUCTURE EXAMPLE:
-1 (a) Correct substitution shown. (1)
-      Correct answer = 4.0 m/s² (allow ±0.1). (1)
-
-(b) Any two from: (2)
-    • Reduces friction. (1)
-    • Increases driving force. (1)
-    • Reduces mass of vehicle. (1)
-
-(c) The current decreases. (1)
-    [NOTE]: Accept "resistance increases so current decreases"
-
-(Total for question 1 = 5 marks)
 
 Question mapping and numbering:
 - Use EXACTLY the question numbers and sub-parts from the DETECTED QUESTION STRUCTURE below.
@@ -340,7 +320,6 @@ Question mapping and numbering:
 
 
 def run_agent(prompt, content: str) -> str:
-    """Generic helper to call a text-only agent prompt."""
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -352,24 +331,30 @@ def run_agent(prompt, content: str) -> str:
     return response.choices[0].message.content
 
 
-def run_full_revision_via_agents(worksheet_text: str, markscheme_text: str, spec_text: str):
-    """
-    Run the current worksheet + mark scheme through the full multi-agent
-    pipeline (Agents 1–5) to repair structural issues.
-    """
+def run_full_revision_via_agents(
+    worksheet_text: str,
+    markscheme_text: str,
+    spec_text: str,
+    on_step=None,
+):
     combined_ws_ms = f"WORKSHEET:\n{worksheet_text}\n\nMARK SCHEME:\n{markscheme_text}"
 
-    report1 = run_agent(AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
-    report2 = run_agent(AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
-    report3 = run_agent(AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}")
+    agent_steps = [
+        ("Checking command word alignment...",   AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
+        ("Verifying mark allocations...",        AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
+        ("Checking physics accuracy...",         AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
+    ]
+    coverage_input = f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}\n\nINTENDED SCOPE:\n{spec_text}"
+    agent_steps.append(("Evaluating topic coverage...", AGENT_4_PROMPT, coverage_input))
 
-    coverage_input = f"""WORKSHEET AND MARK SCHEME:
-{combined_ws_ms}
+    reports = []
+    total = 5
+    for i, (label, prompt, content) in enumerate(agent_steps):
+        if on_step:
+            on_step(i, total, f"Agent {i+1}: {label}")
+        reports.append(run_agent(prompt, content))
 
-INTENDED SCOPE:
-{spec_text}
-"""
-    report4 = run_agent(AGENT_4_PROMPT, coverage_input)
+    report1, report2, report3, report4 = reports
 
     combined_input = f"""ORIGINAL WORKSHEET:
 {worksheet_text}
@@ -392,41 +377,26 @@ AGENT 3 REPORT:
 AGENT 4 REPORT:
 {report4}
 """
-    final_version = run_agent(AGENT_5_PROMPT, combined_input)
-    return final_version
+    if on_step:
+        on_step(4, total, "Agent 5: Intelligent revision and finalising...")
+    return run_agent(AGENT_5_PROMPT, combined_input)
 
 
 def parse_revised_output(text: str):
-    """
-    Split the Agent 5 result into revised worksheet and mark scheme.
-    Tries three strategies, falls back to (None, None) on failure.
-    """
     ws_marker = "--- REVISED WORKSHEET ---"
     ms_marker = "--- REVISED MARK SCHEME ---"
-
     ws_idx = text.find(ws_marker)
     ms_idx = text.find(ms_marker)
     if ws_idx != -1 and ms_idx != -1:
-        ws_start = ws_idx + len(ws_marker)
-        ms_start = ms_idx + len(ms_marker)
-        return text[ws_start:ms_idx].strip(), text[ms_start:].strip()
-
+        return text[ws_idx + len(ws_marker):ms_idx].strip(), text[ms_idx + len(ms_marker):].strip()
     ws_match = re.search(r"-{2,}\s*REVISED\s+WORKSHEET\s*-{2,}", text, re.IGNORECASE)
     ms_match = re.search(r"-{2,}\s*REVISED\s+MARK\s+SCHEME\s*-{2,}", text, re.IGNORECASE)
     if ws_match and ms_match:
-        ws_start = ws_match.end()
-        ms_start = ms_match.end()
-        worksheet_part = text[ws_start:ms_match.start()].strip()
-        markscheme_part = text[ms_start:].strip()
-        return worksheet_part, markscheme_part
-
+        return text[ws_match.end():ms_match.start()].strip(), text[ms_match.end():].strip()
     return None, None
 
 
 def run_formatting_agent(worksheet_text):
-    """
-    Call the FormattingAgent to obtain structured formatting instructions.
-    """
     cleaned = strip_answer_lines(clean_text(worksheet_text))
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -444,58 +414,44 @@ def run_formatting_agent(worksheet_text):
     except json.JSONDecodeError as exc:
         raise ValueError(
             f"FormattingAgent returned invalid JSON ({exc}). "
-            f"First 500 chars of raw output:\n{raw[:500]}"
+            f"First 500 chars:\n{raw[:500]}"
         ) from exc
 
 
 def render_formatted_preview(spec):
-    """
-    Render a structured, exam-style preview in Streamlit.
-    """
     lines = spec.get("lines", [])
-    st.markdown("### Formatted Worksheet Preview")
-
-    st.markdown(
-        """
+    st.markdown("#### Formatted Worksheet Preview")
+    st.markdown("""
 <style>
 .worksheet-preview {
-    max-width: 800px;
-    padding: 12px 24px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background-color: #11141f;
+    max-width: 760px; padding: 16px 28px;
+    border: 1px solid #2a2f3e; border-radius: 8px;
+    background-color: #ffffff; color: #111;
 }
 .q-line {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 2px;
-    font-family: Arial, sans-serif;
-    font-size: 11pt;
+    display: flex; justify-content: space-between;
+    margin-bottom: 2px; font-family: Arial, sans-serif;
+    font-size: 11pt; color: #111;
 }
-.q-main { margin-top: 14px; }
+.q-main { margin-top: 18px; }
+.q-subpart { margin-top: 9px; }
+.q-roman { margin-top: 4px; }
 .q-indent-0 { padding-left: 0; }
 .q-indent-1 { padding-left: 28px; }
 .q-indent-2 { padding-left: 52px; }
 .q-text { white-space: pre-wrap; flex: 1; padding-right: 12px; }
-.q-marks { min-width: 40px; text-align: right; font-weight: bold; }
-.q-total { margin-top: 6px; margin-bottom: 6px; font-weight: bold; }
-.answer-line {
-    border-bottom: 1px solid #666;
-    margin: 3px 0;
-    height: 18px;
-}
-.answer-indent-0 { margin-left: 0px; margin-right: 44px; }
-.answer-indent-1 { margin-left: 28px; margin-right: 44px; }
-.answer-indent-2 { margin-left: 52px; margin-right: 44px; }
+.q-marks { min-width: 40px; text-align: right; font-weight: bold; color: #111; }
+.q-total { margin-top: 6px; margin-bottom: 14px; font-weight: bold; color: #111; }
+.answer-line { border-bottom: 1px solid #888; margin: 4px 0; height: 20px; }
+.answer-indent-0 { margin-left: 0px; margin-right: 52px; }
+.answer-indent-1 { margin-left: 28px; margin-right: 52px; }
+.answer-indent-2 { margin-left: 52px; margin-right: 52px; }
 .q-bold { font-weight: bold; }
-</style>
-        """,
-        unsafe_allow_html=True,
-    )
+</style>""", unsafe_allow_html=True)
 
     html_lines = ['<div class="worksheet-preview">']
     last_q = None
-
+    prev_indent_preview = None
     for line in lines:
         qnum = line.get("question_number")
         indent_level = int(line.get("indent_level", 0))
@@ -505,43 +461,46 @@ def render_formatted_preview(spec):
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
-        main_class = " q-main" if (qnum != last_q and indent_level == 0 and not is_total) else ""
-
         if is_total:
             html_lines.append(
                 f'<div class="q-line q-total q-indent-0">'
-                f'<div class="q-text">(Total for question {qnum} = {marks} marks)</div>'
-                f'</div>'
+                f'<div class="q-text">(Total for question {qnum} is {marks} marks)</div></div>'
             )
             last_q = qnum
+            prev_indent_preview = None
             continue
 
-        # Compose label
+        # Determine spacing class
+        if indent_level == 0 and qnum != last_q:
+            spacing_class = " q-main"
+        elif indent_level == 1 and prev_indent_preview is not None and prev_indent_preview != 0 and last_q == qnum:
+            spacing_class = " q-subpart"
+        elif indent_level == 2:
+            spacing_class = " q-roman"
+        else:
+            spacing_class = ""
+
         if indent_level == 0 and qnum:
             label_html = f'<span class="q-bold">{qnum}</span>&nbsp;&nbsp;'
         elif indent_level == 1 and part_label:
             label_html = f'<span class="q-bold">{part_label}</span>&nbsp;'
         elif indent_level >= 2 and (subpart_label or part_label):
-            lbl = subpart_label or part_label
-            label_html = f'<span class="q-bold">{lbl}</span>&nbsp;'
+            label_html = f'<span class="q-bold">{subpart_label or part_label}</span>&nbsp;'
         else:
             label_html = ""
 
         html_lines.append(
-            f'<div class="q-line q-indent-{indent_level}{main_class}">'
+            f'<div class="q-line q-indent-{indent_level}{spacing_class}">'
             f'<div class="q-text">{label_html}{question_text}</div>'
-            f'<div class="q-marks">{f"({marks})" if marks else ""}</div>'
-            f'</div>'
+            f'<div class="q-marks">{f"({marks})" if marks else ""}</div></div>'
         )
-
-        # Answer lines based on marks
         if marks and marks > 0:
             num_lines = min(int(marks) + 1, 5)
             ans_class = f"answer-indent-{min(indent_level, 2)}"
             for _ in range(num_lines):
                 html_lines.append(f'<div class="answer-line {ans_class}"></div>')
-
         last_q = qnum
+        prev_indent_preview = indent_level
 
     html_lines.append("</div>")
     st.markdown("\n".join(html_lines), unsafe_allow_html=True)
@@ -552,11 +511,9 @@ def render_formatted_preview(spec):
 # ================================================================
 
 def _set_run_font(run, bold=False, size_pt=11):
-    """Apply Arial 11pt and optional bold to a run."""
     run.font.name = "Arial"
     run.font.size = Pt(size_pt)
     run.bold = bold
-    # Also set font in rPr for compatibility
     rPr = run._r.get_or_add_rPr()
     rFonts = OxmlElement('w:rFonts')
     rFonts.set(qn('w:ascii'), 'Arial')
@@ -564,10 +521,10 @@ def _set_run_font(run, bold=False, size_pt=11):
     rPr.insert(0, rFonts)
 
 
-def _add_answer_underline(document, left_indent_cm, content_width_cm, num_lines=3):
+def _add_answer_underline(document, left_indent_cm, num_lines=3):
     """
-    Add answer lines as paragraphs with a bottom border, indented to match the question level.
-    Using bottom border approach gives a clean professional line.
+    Add answer lines as paragraphs with a paragraph bottom border.
+    left_indent_cm is a plain float (centimetres) — no .cm call needed.
     """
     for _ in range(num_lines):
         p = document.add_paragraph()
@@ -576,19 +533,15 @@ def _add_answer_underline(document, left_indent_cm, content_width_cm, num_lines=
         pf.right_indent = Cm(0.5)
         pf.space_before = Pt(0)
         pf.space_after = Pt(4)
-
-        # Add bottom border via XML for a clean answer line
         pPr = p._p.get_or_add_pPr()
         pBdr = OxmlElement('w:pBdr')
         bottom = OxmlElement('w:bottom')
         bottom.set(qn('w:val'), 'single')
-        bottom.set(qn('w:sz'), '4')   # 0.5pt border
+        bottom.set(qn('w:sz'), '4')
         bottom.set(qn('w:space'), '1')
         bottom.set(qn('w:color'), '000000')
         pBdr.append(bottom)
         pPr.append(pBdr)
-
-        # Empty run to set font
         run = p.add_run("")
         run.font.name = "Arial"
         run.font.size = Pt(11)
@@ -596,18 +549,12 @@ def _add_answer_underline(document, left_indent_cm, content_width_cm, num_lines=
 
 def build_formatted_docx(spec):
     """
-    Build a fully formatted A4 Word document (.docx) based on
-    FormattingAgent instructions, following the GCSE guideline:
-    - A4, Moderate margins (top/bottom 2.54 cm, left/right 1.91 cm)
-    - Arial 11pt
-    - Bold question numbers and part labels
-    - Right-aligned marks
-    - Answer lines via bottom border
-    - Space between questions, no space between sub-parts
+    Build a fully formatted A4 Word document (.docx) from FormattingAgent spec.
+    BUG FIX: All indentation is stored as plain cm floats to avoid the
+    'int object has no attribute cm' error caused by arithmetic on Length/EMU values.
     """
     document = Document()
 
-    # --- Page setup: A4, Moderate margins ---
     section = document.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21.0)
@@ -616,26 +563,26 @@ def build_formatted_docx(spec):
     section.left_margin = Cm(1.91)
     section.right_margin = Cm(1.91)
 
-    # --- Base style: Arial 11 ---
     style = document.styles["Normal"]
     style.font.name = "Arial"
     style.font.size = Pt(11)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.space_before = Pt(0)
 
-    # Usable content width (for tab stop calculation)
-    content_width = section.page_width - section.left_margin - section.right_margin
-    # Right-aligned marks tab stop: near right margin
-    mark_tab = content_width - Cm(0.3)
+    # Compute content width in EMU for tab stops (arithmetic on section props gives plain int/EMU)
+    content_width_emu = (
+        section.page_width - section.left_margin - section.right_margin
+    )
+    mark_tab_emu = content_width_emu - Cm(0.3)
 
-    # Indentation levels (cm) — how far the TEXT starts
-    TEXT_INDENT = [Cm(0.8), Cm(1.5), Cm(2.3)]
-    # Left hanging indent per level (where the LABEL starts)
-    LEFT_INDENT = [Cm(0.0), Cm(0.8), Cm(1.5)]
+    # Use plain cm floats throughout — avoids any .cm attribute error
+    TEXT_INDENT_CM = [0.8, 1.5, 2.3]   # where text body starts
+    LEFT_INDENT_CM = [0.0, 0.8, 1.5]   # where label starts
 
     lines = spec.get("lines", [])
     paper_total = spec.get("paper_total_marks")
     last_q = None
+    prev_indent = None
 
     def add_question_paragraph(label, label_bold, text_content, marks, indent_level, space_before_pt):
         p = document.add_paragraph()
@@ -643,30 +590,25 @@ def build_formatted_docx(spec):
         pf.space_before = Pt(space_before_pt)
         pf.space_after = Pt(0)
 
-        # Hanging indent: label sticks left, text indented right
-        li = LEFT_INDENT[indent_level]
-        ti = TEXT_INDENT[indent_level]
-        pf.left_indent = li
-        pf.first_line_indent = -(ti - li)
+        li_cm = LEFT_INDENT_CM[indent_level]
+        ti_cm = TEXT_INDENT_CM[indent_level]
+        pf.left_indent = Cm(ti_cm)
+        pf.first_line_indent = Cm(-(ti_cm - li_cm))
 
-        # Tab stops: text at (ti - li) from left, marks at far right
         pf.tab_stops.clear_all()
-        pf.tab_stops.add_tab_stop(ti - li, WD_TAB_ALIGNMENT.LEFT)
-        pf.tab_stops.add_tab_stop(mark_tab, WD_TAB_ALIGNMENT.RIGHT)
+        pf.tab_stops.add_tab_stop(Cm(ti_cm), WD_TAB_ALIGNMENT.LEFT)
+        pf.tab_stops.add_tab_stop(mark_tab_emu, WD_TAB_ALIGNMENT.RIGHT)
 
         if label:
             r = p.add_run(label)
             _set_run_font(r, bold=label_bold)
             p.add_run("\t")
-
         r2 = p.add_run(text_content)
         _set_run_font(r2, bold=False)
-
         if marks:
             p.add_run("\t")
             r3 = p.add_run(f"({marks})")
             _set_run_font(r3, bold=True)
-
         return p
 
     for line in lines:
@@ -678,72 +620,54 @@ def build_formatted_docx(spec):
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
-        # --- Total for question line ---
         if is_total:
             p = document.add_paragraph()
-            pf = p.paragraph_format
-            pf.space_before = Pt(4)
-            pf.space_after = Pt(10)
-            r = p.add_run(f"(Total for question {qnum} = {marks} marks)")
+            p.paragraph_format.space_before = Pt(4)
+            p.paragraph_format.space_after = Pt(14)
+            r = p.add_run(f"(Total for question {qnum} is {marks} marks)")
             _set_run_font(r, bold=True)
             last_q = qnum
+            prev_indent = None
             continue
 
-        # --- Determine spacing before this line ---
         if indent_level == 0:
-            # New main question: add space above (except the very first)
-            sp_before = 14 if (last_q is not None and qnum != last_q) else 0
+            sp_before = 16 if (last_q is not None and qnum != last_q) else 0
+        elif indent_level == 1:
+            # Space before (b), (c) etc. — but NOT right after a main question stem
+            sp_before = 8 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 0
+        elif indent_level == 2:
+            sp_before = 4
         else:
-            # Sub-parts: no extra space
             sp_before = 0
 
-        # --- Compose label ---
         if indent_level == 0 and qnum:
-            label = qnum
-            label_bold = True
+            label, label_bold = qnum, True
         elif indent_level == 1 and part_label:
-            label = part_label
-            label_bold = True
+            label, label_bold = part_label, True
         elif indent_level >= 2 and (subpart_label or part_label):
-            label = subpart_label or part_label
-            label_bold = True
+            label, label_bold = (subpart_label or part_label), True
         else:
-            label = ""
-            label_bold = False
+            label, label_bold = "", False
 
         add_question_paragraph(
-            label=label,
-            label_bold=label_bold,
-            text_content=question_text,
-            marks=marks,
-            indent_level=min(indent_level, 2),
-            space_before_pt=sp_before,
+            label=label, label_bold=label_bold,
+            text_content=question_text, marks=marks,
+            indent_level=min(indent_level, 2), space_before_pt=sp_before,
         )
 
-        # --- Answer lines ---
         if marks and marks > 0:
             m = int(marks)
-            # Number of answer lines based on marks
-            if m == 1:
-                num_ans = 2
-            elif m == 2:
-                num_ans = 3
-            elif m == 3:
-                num_ans = 4
-            else:
-                num_ans = 5
-
-            ans_indent = TEXT_INDENT[min(indent_level, 2)].cm
-            _add_answer_underline(document, ans_indent, content_width.cm, num_ans)
+            num_ans = 2 if m == 1 else (3 if m == 2 else (4 if m == 3 else 5))
+            # Use the plain cm float directly — no .cm call on any object
+            ans_indent_cm = TEXT_INDENT_CM[min(indent_level, 2)]
+            _add_answer_underline(document, ans_indent_cm, num_ans)
 
         last_q = qnum
+        prev_indent = indent_level
 
-    # --- Final total for paper ---
     if paper_total:
         p = document.add_paragraph()
-        pf = p.paragraph_format
-        pf.space_before = Pt(16)
-        pf.space_after = Pt(0)
+        p.paragraph_format.space_before = Pt(16)
         r = p.add_run(f"Total for paper = {paper_total} marks")
         _set_run_font(r, bold=True)
 
@@ -755,19 +679,13 @@ def build_formatted_docx(spec):
 
 def build_markscheme_docx(markscheme_text: str) -> BytesIO:
     """
-    Build a formatted A4 Word document for the mark scheme, following
-    the GCSE guideline:
-    - A4, Moderate margins
-    - Arial 11pt
-    - Bold question numbers
-    - Each (1) mark on its own line
-    - No space between marks within a part
-    - Small space between sub-parts
-    - Total marks for question paper line at the end
+    Build a mark scheme DOCX matching the Edexcel format:
+    - Each marking point ends with bold (1)
+    - 'Any X from:' lines followed by bullet points
+    - (Total for question X is Y marks) — bold, 'is' not '='
+    - Total marks line — bold + underlined
     """
     document = Document()
-
-    # --- Page setup ---
     section = document.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21.0)
@@ -775,81 +693,112 @@ def build_markscheme_docx(markscheme_text: str) -> BytesIO:
     section.bottom_margin = Cm(2.54)
     section.left_margin = Cm(1.91)
     section.right_margin = Cm(1.91)
-
-    # --- Base style ---
     style = document.styles["Normal"]
     style.font.name = "Arial"
     style.font.size = Pt(11)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.space_before = Pt(0)
 
-    lines = markscheme_text.split("\n")
-
-    # Patterns to detect structure
     MAIN_Q_RE = re.compile(r"^\s*(\d+)\s")
     PART_RE = re.compile(r"^\s*\(([a-z])\)")
     ROMAN_RE = re.compile(r"^\s*\((i{1,4}|iv|vi{0,3}|ix|xi{0,3}|x{1,3})\)", re.IGNORECASE)
+    BULLET_RE = re.compile(r"^\s*[•\-\*]\s+")
     TOTAL_Q_RE = re.compile(r"\(Total for question", re.IGNORECASE)
     TOTAL_PAPER_RE = re.compile(r"Total marks for question paper", re.IGNORECASE)
-    TOTAL_PAPER_ALT = re.compile(r"Total for paper\s*=", re.IGNORECASE)
+    TOTAL_PAPER_ALT = re.compile(r"Total for paper\s*[=:]", re.IGNORECASE)
 
-    prev_was_part = False
+    def add_inline_bold_marks(p, text, base_bold=False):
+        """Split text on (1) and emit alternating normal / bold runs."""
+        parts = re.split(r'(\(1\))', text)
+        for part in parts:
+            if part == "(1)":
+                r = p.add_run("(1)")
+                _set_run_font(r, bold=True)
+            elif part:
+                r = p.add_run(part)
+                _set_run_font(r, bold=base_bold)
 
-    for raw_line in lines:
+    prev_line_type = None  # 'main', 'part', 'bullet', 'other', 'total'
+
+    for raw_line in markscheme_text.split("\n"):
         line = raw_line.strip()
         if not line:
             continue
 
-        p = document.add_paragraph()
-        pf = p.paragraph_format
-        pf.space_after = Pt(0)
-
-        # Total for paper (end line)
+        # ---- Total for paper ----
         if TOTAL_PAPER_RE.search(line) or TOTAL_PAPER_ALT.search(line):
-            pf.space_before = Pt(14)
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(14)
+            p.paragraph_format.space_after = Pt(0)
             r = p.add_run(line)
             _set_run_font(r, bold=True)
+            r.underline = True
+            prev_line_type = 'total'
             continue
 
-        # Total for question line
+        # ---- Total for question ----
         if TOTAL_Q_RE.search(line):
-            pf.space_before = Pt(4)
-            pf.space_after = Pt(8)
+            # Normalise "=" -> "is"
+            line = re.sub(
+                r'(Total for question\s+\w+)\s*=\s*(\d+)',
+                r'\1 is \2',
+                line, flags=re.IGNORECASE
+            )
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(4)
+            p.paragraph_format.space_after = Pt(12)
             r = p.add_run(line)
             _set_run_font(r, bold=True)
-            prev_was_part = False
+            prev_line_type = 'total'
             continue
 
-        # New sub-part line (a), (b), (i), (ii) — small space before
-        is_part_line = (PART_RE.match(line) or ROMAN_RE.match(line))
-        is_main_q = MAIN_Q_RE.match(line)
-
-        if is_main_q:
-            pf.space_before = Pt(10) if prev_was_part else Pt(0)
-            pf.left_indent = Cm(0)
-            # Bold the question number
-            m = MAIN_Q_RE.match(line)
-            q_num = m.group(1)
-            rest = line[m.end():]
-            r1 = p.add_run(q_num + " ")
-            _set_run_font(r1, bold=True)
-            r2 = p.add_run(rest)
-            _set_run_font(r2, bold=False)
-            prev_was_part = False
-
-        elif is_part_line:
-            pf.space_before = Pt(4) if prev_was_part else Pt(0)
-            pf.left_indent = Cm(0.8)
-            r = p.add_run(line)
+        # ---- Bullet point ----
+        if BULLET_RE.match(line):
+            text_after_bullet = BULLET_RE.sub("", line).strip()
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.left_indent = Cm(1.8)
+            p.paragraph_format.first_line_indent = Cm(-0.4)
+            r = p.add_run("\u2022 ")
             _set_run_font(r, bold=False)
-            prev_was_part = True
+            add_inline_bold_marks(p, text_after_bullet)
+            prev_line_type = 'bullet'
+            continue
+
+        # ---- Identify line type ----
+        is_main = MAIN_Q_RE.match(line)
+        is_part = PART_RE.match(line) or ROMAN_RE.match(line)
+
+        if is_main:
+            sp_before = 14 if prev_line_type in ('total', 'part', 'bullet', 'other') else 0
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(sp_before)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.left_indent = Cm(0)
+            m = is_main
+            r = p.add_run(m.group(1) + " ")
+            _set_run_font(r, bold=True)
+            add_inline_bold_marks(p, line[m.end():])
+            prev_line_type = 'main'
+
+        elif is_part:
+            sp_before = 4 if prev_line_type in ('part', 'bullet', 'other') else 0
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(sp_before)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.left_indent = Cm(0.8)
+            add_inline_bold_marks(p, line)
+            prev_line_type = 'part'
 
         else:
-            # Continuation of a mark point (indented under its parent)
-            pf.space_before = Pt(0)
-            pf.left_indent = Cm(1.5)
-            r = p.add_run(line)
-            _set_run_font(r, bold=False)
+            # Continuation / any-from line / notes
+            p = document.add_paragraph()
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.left_indent = Cm(1.5)
+            add_inline_bold_marks(p, line)
+            prev_line_type = 'other'
 
     bio = BytesIO()
     document.save(bio)
@@ -857,38 +806,116 @@ def build_markscheme_docx(markscheme_text: str) -> BytesIO:
     return bio
 
 
-# ---------------- MAIN ----------------
+# ================================================================
+# MAIN PIPELINE
+# ================================================================
 
 if run_button and worksheet_file:
+    _PIPELINE_STEPS = [
+        ("📂", "Reading uploaded files"),
+        ("✏️",  "Enhancing worksheet"),
+        ("📋", "Generating mark scheme"),
+        ("🔍", "Agent 1: Command word alignment"),
+        ("📐", "Agent 2: Mark scheme structure"),
+        ("🔬", "Agent 3: Cognitive balance"),
+        ("🗂️", "Agent 4: Topic coverage"),
+        ("✨", "Agent 5: Intelligent revision"),
+    ]
 
-    progress = st.progress(0)
-    status = st.empty()
+    def _render_pipeline(current_step):
+        rows = ""
+        for i, (icon, label) in enumerate(_PIPELINE_STEPS):
+            if i < current_step:
+                dot = '<span style="color:#22c55e;font-size:1.1em">✓</span>'
+                col = "#22c55e"
+            elif i == current_step:
+                dot = f'<span style="font-size:1.1em">{icon}</span>'
+                col = "#60a5fa"
+            else:
+                dot = '<span style="color:#4b5563;font-size:1.1em">○</span>'
+                col = "#6b7280"
+            rows += (
+                f'<div style="display:flex;align-items:center;gap:10px;padding:5px 0;'
+                f'color:{col};font-family:Arial,sans-serif;font-size:14px">'
+                f'{dot}<span>{label}</span></div>'
+            )
+        return (
+            '<div style="background:#1a1f2e;border:1px solid #374151;border-radius:10px;'
+            'padding:18px 22px;max-width:480px">'
+            '<div style="font-weight:bold;color:#f9fafb;margin-bottom:12px;'
+            'font-family:Arial,sans-serif;font-size:15px">⚙️ Running enhancement pipeline…</div>'
+            + rows + '</div>'
+        )
 
-    status.text("Reading files...")
-    progress.progress(10)
-    time.sleep(0.2)
+    _prog_box = st.empty()
 
+    # Step 0: read files
+    _prog_box.markdown(_render_pipeline(0), unsafe_allow_html=True)
     worksheet_text = extract_docx(worksheet_file)
     markscheme_text = extract_docx(markscheme_file) if markscheme_file else ""
     spec_text = read_spec_text(spec_txt, spec_docx, pasted_spec)
 
-    status.text("Step 2: Cleaning & enhancing worksheet...")
-    progress.progress(30)
+    # Step 1: enhance worksheet
+    _prog_box.markdown(_render_pipeline(1), unsafe_allow_html=True)
     improved_ws = improve_worksheet(worksheet_text)
 
-    status.text("Step 3: Generating / improving mark scheme...")
-    progress.progress(60)
+    # Step 2: generate mark scheme
+    _prog_box.markdown(_render_pipeline(2), unsafe_allow_html=True)
     improved_ms = generate_markscheme(improved_ws)
 
-    progress.progress(100)
-    status.text("Complete.")
-    st.success("Enhancement complete — see outputs below.")
+    # Step 3–6: Agents 1–4
+    _combined = f"WORKSHEET:\n{improved_ws}\n\nMARK SCHEME:\n{improved_ms}"
+    _prog_box.markdown(_render_pipeline(3), unsafe_allow_html=True)
+    _r1 = run_agent(AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{_combined}")
 
-    st.session_state["worksheet_text"] = worksheet_text
-    st.session_state["markscheme_text"] = markscheme_text
-    st.session_state["improved_ws"] = improved_ws
-    st.session_state["improved_ms"] = improved_ms
-    st.session_state["spec_text"] = spec_text
+    _prog_box.markdown(_render_pipeline(4), unsafe_allow_html=True)
+    _r2 = run_agent(AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{_combined}")
+
+    _prog_box.markdown(_render_pipeline(5), unsafe_allow_html=True)
+    _r3 = run_agent(AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{_combined}")
+
+    _prog_box.markdown(_render_pipeline(6), unsafe_allow_html=True)
+    _r4 = run_agent(AGENT_4_PROMPT,
+        f"WORKSHEET AND MARK SCHEME:\n{_combined}\n\nINTENDED SCOPE:\n{spec_text}")
+
+    # Step 7: Agent 5 — intelligent revision
+    _prog_box.markdown(_render_pipeline(7), unsafe_allow_html=True)
+    _agent5_input = (
+        f"ORIGINAL WORKSHEET:\n{improved_ws}\n\nORIGINAL MARK SCHEME:\n{improved_ms}\n\n"
+        f"INTENDED SCOPE:\n{spec_text}\n\n"
+        f"AGENT 1 REPORT:\n{_r1}\n\nAGENT 2 REPORT:\n{_r2}\n\n"
+        f"AGENT 3 REPORT:\n{_r3}\n\nAGENT 4 REPORT:\n{_r4}"
+    )
+    _final_text = run_agent(AGENT_5_PROMPT, _agent5_input)
+    _revised_ws, _revised_ms = parse_revised_output(_final_text)
+    if _revised_ws:
+        improved_ws = _revised_ws
+    if _revised_ms:
+        improved_ms = _revised_ms
+
+    # Show all steps complete
+    _prog_box.markdown(
+        '<div style="background:#1a1f2e;border:1px solid #374151;border-radius:10px;'
+        'padding:18px 22px;max-width:480px;font-family:Arial,sans-serif">'
+        '<div style="font-weight:bold;color:#22c55e;font-size:15px">✅ Enhancement complete — review and export below.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.session_state.update({
+        "worksheet_text": worksheet_text,
+        "markscheme_text": markscheme_text,
+        "improved_ws": improved_ws,
+        "improved_ms": improved_ms,
+        "spec_text": spec_text,
+    })
+    for k in ("fmt_spec", "fmt_docx_bytes", "ms_docx_bytes"):
+        st.session_state.pop(k, None)
+
+
+# ================================================================
+# OUTPUT SECTION
+# ================================================================
 
 if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
     worksheet_text = st.session_state["worksheet_text"]
@@ -897,22 +924,18 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
     improved_ms = st.session_state.get("improved_ms", "")
     spec_text = st.session_state.get("spec_text", "")
 
-    # ---------------- OUTPUT ----------------
+    st.markdown("---")
+    st.subheader("Enhanced Worksheet")
+    st.text_area("Worksheet Output", improved_ws, height=400, key="ws_output")
 
-    col1, col2 = st.columns(2)
+    st.markdown("---")
+    st.subheader("Enhanced Mark Scheme")
+    st.text_area("Mark Scheme Output", improved_ms, height=400, key="ms_output")
 
-    with col1:
-        st.subheader("Enhanced Worksheet")
-        st.text_area("Worksheet Output", improved_ws, height=450, key="ws_output")
+    st.markdown("---")
 
-    with col2:
-        st.subheader("Enhanced Mark Scheme")
-        st.text_area("Mark Scheme Output", improved_ms, height=450, key="ms_output")
-
-    # ---------------- VALIDATION ----------------
-
+    # ---- QA Validation ----
     with st.expander("🔎 QA Validation Report"):
-
         misaligned = False
         validation_ms_text = improved_ms or markscheme_text
 
@@ -920,40 +943,32 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             overlap = keyword_overlap(improved_ws, validation_ms_text)
             st.write(f"Keyword alignment: {overlap}%")
             if overlap < 40:
-                st.error("⚠ Content misalignment detected (low keyword overlap).")
+                st.error("Content misalignment detected (low keyword overlap).")
 
         ws_total = extract_total(improved_ws)
         ms_total = extract_total(validation_ms_text)
-
         if ws_total and ms_total and ws_total != ms_total:
-            st.error(f"⚠ Total mismatch: Worksheet = {ws_total}, Mark Scheme = {ms_total}")
+            st.error(f"Total mismatch: Worksheet = {ws_total}, Mark Scheme = {ms_total}")
             misaligned = True
-
         if fractional_marks_present(validation_ms_text):
-            st.error("⚠ Fractional marks detected.")
+            st.error("Fractional marks detected.")
             misaligned = True
 
         ws_questions = extract_question_numbers(improved_ws)
         ms_questions = extract_question_numbers(validation_ms_text)
-
         mismatch_details = []
         if ws_questions != ms_questions:
-            missing_from_ms = [q for q in ws_questions if q not in ms_questions]
-            extra_in_ms    = [q for q in ms_questions if q not in ws_questions]
-            if missing_from_ms:
-                mismatch_details.append(
-                    f"Questions present in worksheet but MISSING from mark scheme: {missing_from_ms}"
-                )
-            if extra_in_ms:
-                mismatch_details.append(
-                    f"Questions in mark scheme but NOT in worksheet (remove them): {extra_in_ms}"
-                )
-            st.error("⚠ Question number mismatch detected.")
-            st.write(f"Worksheet Questions: {ws_questions}")
-            st.write(f"Mark Scheme Questions: {ms_questions}")
+            missing = [q for q in ws_questions if q not in ms_questions]
+            extra   = [q for q in ms_questions if q not in ws_questions]
+            if missing:
+                mismatch_details.append(f"Missing from mark scheme: {missing}")
+            if extra:
+                mismatch_details.append(f"Extra in mark scheme (remove): {extra}")
+            st.error("Question number mismatch detected.")
+            st.write(f"Worksheet: {ws_questions}  |  Mark Scheme: {ms_questions}")
             misaligned = True
         else:
-            st.success("Question numbers align correctly.")
+            st.success("✅ Question numbers align correctly.")
 
         mismatch_info_str = "\n".join(mismatch_details) if mismatch_details else None
 
@@ -961,35 +976,21 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             if st.button("Regenerate Mark Scheme from Worksheet"):
                 regenerated = generate_markscheme(improved_ws, mismatch_info=mismatch_info_str)
                 st.session_state["improved_ms"] = regenerated
+                st.session_state.pop("ms_docx_bytes", None)
                 st.text_area("Regenerated Mark Scheme", regenerated, height=400)
                 st.success("Mark scheme regenerated and saved.")
-
-            if st.button("Run full intelligent revision (Agents 1–5)"):
-                try:
-                    final_text = run_full_revision_via_agents(improved_ws, improved_ms, spec_text)
-                    revised_ws, revised_ms = parse_revised_output(final_text)
-                    if revised_ws is None:
-                        st.error(
-                            "⚠ Agent 5 returned output in an unexpected format — "
-                            "the original worksheet and mark scheme have been kept unchanged. "
-                            "Try clicking the button again."
-                        )
-                    else:
-                        st.session_state["improved_ws"] = revised_ws
-                        if revised_ms:
-                            st.session_state["improved_ms"] = revised_ms
-                        st.success("Worksheet and mark scheme revised via multi-agent pipeline. Scroll up to review.")
-                except Exception as e:
-                    st.error(f"Intelligent revision failed: {e}")
         else:
-            st.success("Structural checks passed (totals, fractions, numbering).")
+            st.success("✅ Structural checks passed.")
 
-    # ---------------- EXPORT ----------------
+    st.markdown("---")
 
-    # Recompute flags for export section
+    # ================================================================
+    # EXPORT
+    # ================================================================
+    st.subheader("Export Documents")
+
     validation_ms_text = improved_ms or markscheme_text
     misaligned_for_export = False
-
     if validation_ms_text:
         ws_total = extract_total(improved_ws)
         ms_total = extract_total(validation_ms_text)
@@ -997,53 +998,51 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             misaligned_for_export = True
         if fractional_marks_present(validation_ms_text):
             misaligned_for_export = True
-        ws_questions = extract_question_numbers(improved_ws)
-        ms_questions = extract_question_numbers(validation_ms_text)
-        if ws_questions != ms_questions:
+        if extract_question_numbers(improved_ws) != extract_question_numbers(validation_ms_text):
             misaligned_for_export = True
 
-    st.subheader("Export Documents")
     override_ok = True
-
     if misaligned_for_export:
-        st.warning(
-            "QA checks found structural issues. You can still export, but please double-check the output."
-        )
-        override_ok = st.checkbox(
-            "Proceed with export despite QA warnings",
-            key="fmt_override",
-        )
+        st.warning("QA checks found structural issues. You can still export — double-check the output.")
+        override_ok = st.checkbox("Proceed with export despite QA warnings", key="fmt_override")
 
     if override_ok:
-        col_a, col_b = st.columns(2)
-
-        with col_a:
-            if st.button("Generate Formatted Worksheet (.docx)", key="fmt_ws"):
+        st.markdown("#### Formatted Worksheet")
+        if st.button("Generate Formatted Worksheet (.docx)", key="fmt_ws"):
+            with st.spinner("Running FormattingAgent — structuring layout..."):
                 try:
-                    with st.spinner("Formatting worksheet..."):
-                        fmt_spec = run_formatting_agent(improved_ws)
-                    render_formatted_preview(fmt_spec)
+                    fmt_spec = run_formatting_agent(improved_ws)
                     docx_bytes = build_formatted_docx(fmt_spec)
-                    st.download_button(
-                        "⬇ Download Worksheet (.docx)",
-                        data=docx_bytes,
-                        file_name="gcse_worksheet_formatted.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    )
+                    st.session_state["fmt_spec"] = fmt_spec
+                    st.session_state["fmt_docx_bytes"] = docx_bytes
                 except Exception as e:
                     st.error(f"Worksheet export failed: {e}")
 
-        with col_b:
-            if st.button("Download Mark Scheme (.docx)", key="fmt_ms"):
+        if "fmt_spec" in st.session_state:
+            render_formatted_preview(st.session_state["fmt_spec"])
+            st.download_button(
+                label="⬇  Download Worksheet (.docx)",
+                data=st.session_state["fmt_docx_bytes"],
+                file_name="gcse_worksheet_formatted.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="dl_ws",
+            )
+
+        st.markdown("---")
+        st.markdown("#### Mark Scheme")
+        if st.button("Generate Mark Scheme (.docx)", key="fmt_ms"):
+            with st.spinner("Building mark scheme document..."):
                 try:
-                    ms_to_export = st.session_state.get("improved_ms", improved_ms)
-                    ms_bytes = build_markscheme_docx(ms_to_export)
-                    st.download_button(
-                        "⬇ Download Mark Scheme (.docx)",
-                        data=ms_bytes,
-                        file_name="gcse_markscheme_formatted.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    )
-                    st.success("Mark scheme ready to download.")
+                    ms_bytes = build_markscheme_docx(st.session_state.get("improved_ms", improved_ms))
+                    st.session_state["ms_docx_bytes"] = ms_bytes
                 except Exception as e:
                     st.error(f"Mark scheme export failed: {e}")
+
+        if "ms_docx_bytes" in st.session_state:
+            st.download_button(
+                label="⬇  Download Mark Scheme (.docx)",
+                data=st.session_state["ms_docx_bytes"],
+                file_name="gcse_markscheme_formatted.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="dl_ms",
+            )
