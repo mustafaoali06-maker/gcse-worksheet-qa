@@ -74,10 +74,16 @@ hr { border-color: #2a2f3e; }
 """, unsafe_allow_html=True)
 
 # ---------------- HEADER ----------------
-_LOGO_B64 = "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"
+_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56" width="56" height="56">
+  <rect width="56" height="56" rx="10" fill="#f39c12"/>
+  <rect x="8" y="8" width="40" height="40" rx="6" fill="#0e1117"/>
+  <text x="28" y="23" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="11" fill="#f39c12">GCSE</text>
+  <line x1="10" y1="28" x2="46" y2="28" stroke="#f39c12" stroke-width="1.5" opacity="0.4"/>
+  <text x="28" y="40" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="8.5" fill="#ffffff" letter-spacing="1">STUDIO</text>
+</svg>"""
 st.markdown(f"""
 <div class="app-header">
-    <img src="data:image/png;base64,{_LOGO_B64}" alt="Logo" />
+    {_LOGO_SVG}
     <span class="app-header-title">GCSE Worksheet QA Studio</span>
 </div>
 """, unsafe_allow_html=True)
@@ -433,16 +439,16 @@ def render_formatted_preview(spec):
     margin-bottom: 2px; font-family: Arial, sans-serif;
     font-size: 11pt; color: #111;
 }
-.q-main { margin-top: 18px; }
-.q-subpart { margin-top: 9px; }
-.q-roman { margin-top: 4px; }
+.q-main { margin-top: 26px; }
+.q-subpart { margin-top: 16px; }
+.q-roman { margin-top: 10px; }
 .q-indent-0 { padding-left: 0; }
 .q-indent-1 { padding-left: 28px; }
 .q-indent-2 { padding-left: 52px; }
 .q-text { white-space: pre-wrap; flex: 1; padding-right: 12px; }
 .q-marks { min-width: 40px; text-align: right; font-weight: bold; color: #111; }
 .q-total { margin-top: 6px; margin-bottom: 14px; font-weight: bold; color: #111; }
-.answer-line { border-bottom: 1px solid #888; margin: 4px 0; height: 20px; }
+.answer-line { border-bottom: 1px solid #888; margin: 5px 0; height: 20px; }
 .answer-indent-0 { margin-left: 0px; margin-right: 52px; }
 .answer-indent-1 { margin-left: 28px; margin-right: 52px; }
 .answer-indent-2 { margin-left: 52px; margin-right: 52px; }
@@ -457,7 +463,10 @@ def render_formatted_preview(spec):
         indent_level = int(line.get("indent_level", 0))
         part_label = line.get("part_label") or ""
         subpart_label = line.get("subpart_label") or ""
-        question_text = line.get("question_text", "")
+        question_text = line.get("question_text") or ""
+        # Sanitise: if AI wrote literal "None" or "none", treat as empty
+        if question_text.strip().lower() == "none":
+            question_text = ""
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
@@ -495,7 +504,7 @@ def render_formatted_preview(spec):
             f'<div class="q-marks">{f"({marks})" if marks else ""}</div></div>'
         )
         if marks and marks > 0:
-            num_lines = min(int(marks) + 1, 5)
+            num_lines = min(int(marks) + 1, 8)
             ans_class = f"answer-indent-{min(indent_level, 2)}"
             for _ in range(num_lines):
                 html_lines.append(f'<div class="answer-line {ans_class}"></div>')
@@ -532,7 +541,7 @@ def _add_answer_underline(document, left_indent_cm, num_lines=3):
         pf.left_indent = Cm(left_indent_cm)
         pf.right_indent = Cm(0.5)
         pf.space_before = Pt(0)
-        pf.space_after = Pt(4)
+        pf.space_after = Pt(5)
         pPr = p._p.get_or_add_pPr()
         pBdr = OxmlElement('w:pBdr')
         bottom = OxmlElement('w:bottom')
@@ -616,7 +625,10 @@ def build_formatted_docx(spec):
         indent_level = int(line.get("indent_level", 0))
         part_label = line.get("part_label") or ""
         subpart_label = line.get("subpart_label") or ""
-        question_text = line.get("question_text", "")
+        question_text = line.get("question_text") or ""
+        # Sanitise: if AI wrote literal "None" or "none", treat as empty
+        if question_text.strip().lower() == "none":
+            question_text = ""
         marks = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
@@ -631,21 +643,24 @@ def build_formatted_docx(spec):
             continue
 
         if indent_level == 0:
-            sp_before = 16 if (last_q is not None and qnum != last_q) else 0
+            sp_before = 18 if (last_q is not None and qnum != last_q) else 0
         elif indent_level == 1:
             # Space before (b), (c) etc. — but NOT right after a main question stem
-            sp_before = 8 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 0
+            sp_before = 14 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 4
         elif indent_level == 2:
-            sp_before = 4
+            sp_before = 8
         else:
             sp_before = 0
 
+        # If indent_level=0 has no text and no marks, still render the question number
+        # (never skip — question numbers must always appear)
+
         if indent_level == 0 and qnum:
-            label, label_bold = qnum, True
+            label, label_bold = qnum, False          # question numbers: plain
         elif indent_level == 1 and part_label:
-            label, label_bold = part_label, True
+            label, label_bold = part_label, True     # (a), (b): bold
         elif indent_level >= 2 and (subpart_label or part_label):
-            label, label_bold = (subpart_label or part_label), True
+            label, label_bold = (subpart_label or part_label), True  # (ii): bold
         else:
             label, label_bold = "", False
 
@@ -657,7 +672,8 @@ def build_formatted_docx(spec):
 
         if marks and marks > 0:
             m = int(marks)
-            num_ans = 2 if m == 1 else (3 if m == 2 else (4 if m == 3 else 5))
+            # marks+1 lines, capped at 8 for very high-mark questions
+            num_ans = min(m + 1, 8)
             # Use the plain cm float directly — no .cm call on any object
             ans_indent_cm = TEXT_INDENT_CM[min(indent_level, 2)]
             _add_answer_underline(document, ans_indent_cm, num_ans)
@@ -1046,3 +1062,81 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 key="dl_ms",
             )
+
+
+# ================================================================
+# AI CHAT ASSISTANT
+# ================================================================
+
+st.markdown("---")
+st.markdown("### 💬 AI Assistant")
+st.markdown(
+    "<div style='color:#9ca3af;font-size:13px;margin-bottom:12px'>"
+    "Ask the assistant to make specific changes to your worksheet or mark scheme, "
+    "or ask any question about the content."
+    "</div>",
+    unsafe_allow_html=True,
+)
+
+_CHAT_SYSTEM = """You are an expert GCSE Physics worksheet editor.
+You help teachers improve their worksheets and mark schemes.
+When the user asks you to change something, provide the corrected text clearly.
+Keep responses concise and practical. Format any worksheet/mark scheme changes clearly,
+showing the original text and the corrected version."""
+
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
+_chat_container = st.container()
+with _chat_container:
+    for msg in st.session_state["chat_history"]:
+        role_label = "🧑 You" if msg["role"] == "user" else "🤖 Assistant"
+        bubble_bg = "#1e2533" if msg["role"] == "user" else "#162032"
+        st.markdown(
+            f'<div style="background:{bubble_bg};border-radius:8px;padding:10px 14px;'
+            f'margin:6px 0;font-family:Arial,sans-serif;font-size:14px;color:#e8e8e8">'
+            f'<strong style="color:#f39c12">{role_label}</strong><br>{msg["content"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+with st.form("chat_form", clear_on_submit=True):
+    _cols = st.columns([5, 1])
+    _user_input = _cols[0].text_input(
+        "Message", placeholder="e.g. Make Q3(b) a 3-mark explain question...", label_visibility="collapsed"
+    )
+    _send = _cols[1].form_submit_button("Send", use_container_width=True)
+
+if _send and _user_input.strip():
+    # Build context from current worksheet/MS if available
+    _ctx_ws = st.session_state.get("improved_ws", "")
+    _ctx_ms = st.session_state.get("improved_ms", "")
+    _context_block = ""
+    if _ctx_ws:
+        _context_block = (
+            f"\n\nCurrent worksheet:\n{_ctx_ws[:3000]}"
+            + (f"\n\nCurrent mark scheme:\n{_ctx_ms[:2000]}" if _ctx_ms else "")
+        )
+
+    _messages = [{"role": "system", "content": _CHAT_SYSTEM + _context_block}]
+    for _m in st.session_state["chat_history"][-10:]:   # last 10 turns for context
+        _messages.append({"role": _m["role"], "content": _m["content"]})
+    _messages.append({"role": "user", "content": _user_input.strip()})
+
+    st.session_state["chat_history"].append({"role": "user", "content": _user_input.strip()})
+
+    with st.spinner("Thinking..."):
+        _resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=_messages,
+            max_tokens=1000,
+            temperature=0.4,
+        )
+        _reply = _resp.choices[0].message.content.strip()
+
+    st.session_state["chat_history"].append({"role": "assistant", "content": _reply})
+    st.rerun()
+
+if st.session_state["chat_history"]:
+    if st.button("🗑  Clear chat", key="clear_chat"):
+        st.session_state["chat_history"] = []
+        st.rerun()
