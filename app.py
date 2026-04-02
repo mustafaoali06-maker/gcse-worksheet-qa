@@ -541,7 +541,7 @@ def _add_answer_underline(document, left_indent_cm, num_lines=3):
         pf.left_indent = Cm(left_indent_cm)
         pf.right_indent = Cm(0.5)
         pf.space_before = Pt(0)
-        pf.space_after = Pt(5)
+        pf.space_after = Pt(2)
         pPr = p._p.get_or_add_pPr()
         pBdr = OxmlElement('w:pBdr')
         bottom = OxmlElement('w:bottom')
@@ -635,7 +635,7 @@ def build_formatted_docx(spec):
         if is_total:
             p = document.add_paragraph()
             p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(14)
+            p.paragraph_format.space_after = Pt(8)
             r = p.add_run(f"(Total for question {qnum} is {marks} marks)")
             _set_run_font(r, bold=True)
             last_q = qnum
@@ -643,12 +643,12 @@ def build_formatted_docx(spec):
             continue
 
         if indent_level == 0:
-            sp_before = 18 if (last_q is not None and qnum != last_q) else 0
+            sp_before = 16 if (last_q is not None and qnum != last_q) else 0
         elif indent_level == 1:
             # Space before (b), (c) etc. — but NOT right after a main question stem
-            sp_before = 14 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 4
+            sp_before = 8 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 2
         elif indent_level == 2:
-            sp_before = 8
+            sp_before = 4
         else:
             sp_before = 0
 
@@ -672,8 +672,8 @@ def build_formatted_docx(spec):
 
         if marks and marks > 0:
             m = int(marks)
-            # marks+1 lines, capped at 8 for very high-mark questions
-            num_ans = min(m + 1, 8)
+            # marks+1 lines, capped at 5 for high-mark questions
+            num_ans = min(m + 1, 5)
             # Use the plain cm float directly — no .cm call on any object
             ans_indent_cm = TEXT_INDENT_CM[min(indent_level, 2)]
             _add_answer_underline(document, ans_indent_cm, num_ans)
@@ -942,11 +942,32 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
 
     st.markdown("---")
     st.subheader("Enhanced Worksheet")
-    st.text_area("Worksheet Output", improved_ws, height=400, key="ws_output")
+    st.markdown(
+        "<div style='color:#9ca3af;font-size:12px;margin-bottom:4px'>"
+        "✏️ Edit directly below — click <strong>Save Edits</strong> to apply your changes.</div>",
+        unsafe_allow_html=True,
+    )
+    _ws_edit = st.text_area("Worksheet Output", value=st.session_state.get("improved_ws", improved_ws),
+                            height=400, key="ws_editor")
+    if st.button("💾 Save Worksheet Edits", key="save_ws_edit"):
+        st.session_state["improved_ws"] = _ws_edit
+        for k in ("fmt_spec", "fmt_docx_bytes"):
+            st.session_state.pop(k, None)
+        st.success("Worksheet edits saved.")
 
     st.markdown("---")
     st.subheader("Enhanced Mark Scheme")
-    st.text_area("Mark Scheme Output", improved_ms, height=400, key="ms_output")
+    st.markdown(
+        "<div style='color:#9ca3af;font-size:12px;margin-bottom:4px'>"
+        "✏️ Edit directly below — click <strong>Save Edits</strong> to apply your changes.</div>",
+        unsafe_allow_html=True,
+    )
+    _ms_edit = st.text_area("Mark Scheme Output", value=st.session_state.get("improved_ms", improved_ms),
+                            height=400, key="ms_editor")
+    if st.button("💾 Save Mark Scheme Edits", key="save_ms_edit"):
+        st.session_state["improved_ms"] = _ms_edit
+        st.session_state.pop("ms_docx_bytes", None)
+        st.success("Mark scheme edits saved.")
 
     st.markdown("---")
 
@@ -1072,68 +1093,157 @@ st.markdown("---")
 st.markdown("### 💬 AI Assistant")
 st.markdown(
     "<div style='color:#9ca3af;font-size:13px;margin-bottom:12px'>"
-    "Ask the assistant to make specific changes to your worksheet or mark scheme, "
-    "or ask any question about the content."
+    "Ask the AI to make changes to your worksheet or mark scheme — it will apply them automatically. "
+    "For a whole-document change (e.g. renaming a character) it can re-run the full pipeline. "
+    "For a targeted fix (e.g. reword Q3b) it edits just that part."
     "</div>",
     unsafe_allow_html=True,
 )
 
 _CHAT_SYSTEM = """You are an expert GCSE Physics worksheet editor.
 You help teachers improve their worksheets and mark schemes.
-When the user asks you to change something, provide the corrected text clearly.
-Keep responses concise and practical. Format any worksheet/mark scheme changes clearly,
-showing the original text and the corrected version."""
+
+IMPORTANT: You MUST respond with ONLY valid JSON — no prose, no markdown fences, nothing outside the JSON object.
+
+JSON schema:
+{
+  "message": "<short explanation of what you did or why>",
+  "action": "modify" | "info",
+  "rerun_pipeline": true | false,
+  "changes": [
+    {
+      "target": "worksheet" | "markscheme",
+      "find": "<exact text to find, verbatim from the document>",
+      "replace": "<exact replacement text>"
+    }
+  ]
+}
+
+Rules:
+- Use action "modify" when making any edit to the worksheet or mark scheme.
+- Use action "info" for questions, explanations or when no edit is needed (changes array will be empty).
+- Set rerun_pipeline to true ONLY for large global changes (e.g. rename student name throughout, change topic, restructure all questions). For individual question edits set it to false.
+- "find" must be an exact verbatim substring of the current document — copy it exactly.
+- "replace" is the new text that replaces that exact substring.
+- You may include multiple change objects in the changes array (e.g. one for worksheet, one for markscheme).
+- If action is "info", set changes to [] and rerun_pipeline to false.
+"""
 
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
+
+
+def _apply_chat_changes(changes, ws, ms):
+    """Apply a list of {target, find, replace} edits. Returns (new_ws, new_ms, applied_count)."""
+    applied = 0
+    for ch in changes:
+        target = ch.get("target", "worksheet")
+        find_str = ch.get("find", "")
+        replace_str = ch.get("replace", "")
+        if not find_str:
+            continue
+        if target == "worksheet" and find_str in ws:
+            ws = ws.replace(find_str, replace_str, 1)
+            applied += 1
+        elif target == "markscheme" and find_str in ms:
+            ms = ms.replace(find_str, replace_str, 1)
+            applied += 1
+    return ws, ms, applied
+
 
 _chat_container = st.container()
 with _chat_container:
     for msg in st.session_state["chat_history"]:
         role_label = "🧑 You" if msg["role"] == "user" else "🤖 Assistant"
         bubble_bg = "#1e2533" if msg["role"] == "user" else "#162032"
+        display_text = msg.get("display", msg["content"])
         st.markdown(
             f'<div style="background:{bubble_bg};border-radius:8px;padding:10px 14px;'
             f'margin:6px 0;font-family:Arial,sans-serif;font-size:14px;color:#e8e8e8">'
-            f'<strong style="color:#f39c12">{role_label}</strong><br>{msg["content"]}</div>',
+            f'<strong style="color:#f39c12">{role_label}</strong><br>{display_text}</div>',
             unsafe_allow_html=True,
         )
 
 with st.form("chat_form", clear_on_submit=True):
     _cols = st.columns([5, 1])
     _user_input = _cols[0].text_input(
-        "Message", placeholder="e.g. Make Q3(b) a 3-mark explain question...", label_visibility="collapsed"
+        "Message", placeholder="e.g. Change 'Olivia' to 'Mustafa' throughout...", label_visibility="collapsed"
     )
     _send = _cols[1].form_submit_button("Send", use_container_width=True)
 
 if _send and _user_input.strip():
-    # Build context from current worksheet/MS if available
     _ctx_ws = st.session_state.get("improved_ws", "")
     _ctx_ms = st.session_state.get("improved_ms", "")
     _context_block = ""
     if _ctx_ws:
         _context_block = (
-            f"\n\nCurrent worksheet:\n{_ctx_ws[:3000]}"
-            + (f"\n\nCurrent mark scheme:\n{_ctx_ms[:2000]}" if _ctx_ms else "")
+            f"\n\nCurrent worksheet:\n{_ctx_ws[:4000]}"
+            + (f"\n\nCurrent mark scheme:\n{_ctx_ms[:2500]}" if _ctx_ms else "")
         )
 
     _messages = [{"role": "system", "content": _CHAT_SYSTEM + _context_block}]
-    for _m in st.session_state["chat_history"][-10:]:   # last 10 turns for context
+    for _m in st.session_state["chat_history"][-10:]:
         _messages.append({"role": _m["role"], "content": _m["content"]})
     _messages.append({"role": "user", "content": _user_input.strip()})
 
-    st.session_state["chat_history"].append({"role": "user", "content": _user_input.strip()})
+    st.session_state["chat_history"].append({"role": "user", "content": _user_input.strip(), "display": _user_input.strip()})
 
     with st.spinner("Thinking..."):
         _resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=_messages,
-            max_tokens=1000,
-            temperature=0.4,
+            max_tokens=1500,
+            temperature=0.3,
         )
-        _reply = _resp.choices[0].message.content.strip()
+        _raw = _resp.choices[0].message.content.strip()
 
-    st.session_state["chat_history"].append({"role": "assistant", "content": _reply})
+    # Parse JSON response
+    try:
+        # Strip markdown fences if model wrapped it anyway
+        _clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", _raw, flags=re.DOTALL).strip()
+        _parsed = json.loads(_clean)
+    except Exception:
+        _parsed = {"message": _raw, "action": "info", "rerun_pipeline": False, "changes": []}
+
+    _action = _parsed.get("action", "info")
+    _msg_text = _parsed.get("message", "")
+    _changes = _parsed.get("changes", [])
+    _rerun_pipeline = _parsed.get("rerun_pipeline", False)
+
+    _display_msg = _msg_text
+    _applied_count = 0
+
+    if _action == "modify" and _changes:
+        _cur_ws = st.session_state.get("improved_ws", "")
+        _cur_ms = st.session_state.get("improved_ms", "")
+        _new_ws, _new_ms, _applied_count = _apply_chat_changes(_changes, _cur_ws, _cur_ms)
+
+        if _applied_count > 0:
+            st.session_state["improved_ws"] = _new_ws
+            st.session_state["improved_ms"] = _new_ms
+            # Clear cached export bytes so they regenerate
+            for _k in ("fmt_spec", "fmt_docx_bytes", "ms_docx_bytes"):
+                st.session_state.pop(_k, None)
+
+            if _rerun_pipeline:
+                _display_msg = (
+                    f"✅ Applied {_applied_count} change(s). "
+                    "Re-running the full enhancement pipeline now — this may take a minute..."
+                )
+                st.session_state["chat_history"].append({"role": "assistant", "content": _raw, "display": _display_msg})
+                st.rerun()
+            else:
+                _targets = ", ".join(sorted({c.get("target","worksheet") for c in _changes}))
+                _display_msg = f"✅ Applied {_applied_count} change(s) to **{_targets}**. {_msg_text}"
+        else:
+            _display_msg = (
+                f"⚠️ Could not find the exact text to replace. {_msg_text}\n\n"
+                "Tip: Use the edit boxes above to make the change manually."
+            )
+    elif _action == "modify" and not _changes:
+        _display_msg = _msg_text or "No changes specified."
+
+    st.session_state["chat_history"].append({"role": "assistant", "content": _raw, "display": _display_msg})
     st.rerun()
 
 if st.session_state["chat_history"]:
