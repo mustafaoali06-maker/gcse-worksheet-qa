@@ -425,46 +425,49 @@ def run_formatting_agent(worksheet_text):
 
 
 def render_formatted_preview(spec):
+    """
+    Render an HTML preview that matches the AQA-style GCSE exam paper format:
+    - Question text on its own line (no inline marks)
+    - Answer lines as underscore characters below the question
+    - Marks on a separate right-aligned bold line after the answer lines
+    - (Total for question X is Y marks) right-aligned bold
+    """
     lines = spec.get("lines", [])
     st.markdown("#### Formatted Worksheet Preview")
     st.markdown("""
 <style>
 .worksheet-preview {
-    max-width: 760px; padding: 16px 28px;
+    max-width: 720px; padding: 20px 32px 20px 24px;
     border: 1px solid #2a2f3e; border-radius: 8px;
     background-color: #ffffff; color: #111;
+    font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4;
 }
-.q-line {
-    display: flex; justify-content: space-between;
-    margin-bottom: 2px; font-family: Arial, sans-serif;
-    font-size: 11pt; color: #111;
+.q-stem   { margin-top: 20px; padding-left: 0; }
+.q-part   { margin-top: 6px;  padding-left: 22px; }
+.q-roman  { margin-top: 4px;  padding-left: 44px; }
+.q-text   { color: #111; }
+.q-ans-line {
+    border-bottom: 1px solid #555;
+    height: 18px; margin: 3px 0;
 }
-.q-main { margin-top: 26px; }
-.q-subpart { margin-top: 16px; }
-.q-roman { margin-top: 10px; }
-.q-indent-0 { padding-left: 0; }
-.q-indent-1 { padding-left: 28px; }
-.q-indent-2 { padding-left: 52px; }
-.q-text { white-space: pre-wrap; flex: 1; padding-right: 12px; }
-.q-marks { min-width: 40px; text-align: right; font-weight: bold; color: #111; }
-.q-total { margin-top: 6px; margin-bottom: 14px; font-weight: bold; color: #111; }
-.answer-line { border-bottom: 1px solid #888; margin: 5px 0; height: 20px; }
-.answer-indent-0 { margin-left: 0px; margin-right: 52px; }
-.answer-indent-1 { margin-left: 28px; margin-right: 52px; }
-.answer-indent-2 { margin-left: 52px; margin-right: 52px; }
-.q-bold { font-weight: bold; }
+.q-ans-0  { margin-left: 0;   margin-right: 0; }
+.q-ans-1  { margin-left: 22px; margin-right: 0; }
+.q-ans-2  { margin-left: 44px; margin-right: 0; }
+.q-marks  { text-align: right; font-weight: bold; color: #111;
+            padding-left: 22px; margin-top: 2px; }
+.q-total  { text-align: right; font-weight: bold; color: #111;
+            margin-top: 8px; margin-bottom: 16px; }
 </style>""", unsafe_allow_html=True)
 
     html_lines = ['<div class="worksheet-preview">']
     last_q = None
-    prev_indent_preview = None
+
     for line in lines:
         qnum = line.get("question_number")
         indent_level = int(line.get("indent_level", 0))
         part_label = line.get("part_label") or ""
         subpart_label = line.get("subpart_label") or ""
         question_text = line.get("question_text") or ""
-        # Sanitise: if AI wrote literal "None" or "none", treat as empty
         if question_text.strip().lower() == "none":
             question_text = ""
         marks = line.get("marks")
@@ -472,44 +475,46 @@ def render_formatted_preview(spec):
 
         if is_total:
             html_lines.append(
-                f'<div class="q-line q-total q-indent-0">'
-                f'<div class="q-text">(Total for question {qnum} is {marks} marks)</div></div>'
+                f'<div class="q-total">'
+                f'(Total for question {qnum} is {marks} marks)</div>'
             )
             last_q = qnum
-            prev_indent_preview = None
             continue
 
-        # Determine spacing class
-        if indent_level == 0 and qnum != last_q:
-            spacing_class = " q-main"
-        elif indent_level == 1 and prev_indent_preview is not None and prev_indent_preview != 0 and last_q == qnum:
-            spacing_class = " q-subpart"
-        elif indent_level == 2:
-            spacing_class = " q-roman"
+        # CSS class for indent level
+        if indent_level == 0:
+            div_class = "q-stem"
+        elif indent_level == 1:
+            div_class = "q-part"
         else:
-            spacing_class = ""
+            div_class = "q-roman"
 
+        # Build label
         if indent_level == 0 and qnum:
-            label_html = f'<span class="q-bold">{qnum}</span>&nbsp;&nbsp;'
+            label_html = f'<strong>{qnum}</strong>&nbsp;&nbsp;'
         elif indent_level == 1 and part_label:
-            label_html = f'<span class="q-bold">{part_label}</span>&nbsp;'
+            label_html = f'<strong>{part_label}</strong>&nbsp;'
         elif indent_level >= 2 and (subpart_label or part_label):
-            label_html = f'<span class="q-bold">{subpart_label or part_label}</span>&nbsp;'
+            label_html = f'<strong>{subpart_label or part_label}</strong>&nbsp;'
         else:
             label_html = ""
 
+        # Question text (no inline marks)
         html_lines.append(
-            f'<div class="q-line q-indent-{indent_level}{spacing_class}">'
-            f'<div class="q-text">{label_html}{question_text}</div>'
-            f'<div class="q-marks">{f"({marks})" if marks else ""}</div></div>'
+            f'<div class="{div_class} q-text">{label_html}{question_text}</div>'
         )
+
+        # Answer lines + marks below
         if marks and marks > 0:
-            num_lines = min(int(marks) + 1, 8)
-            ans_class = f"answer-indent-{min(indent_level, 2)}"
+            m = int(marks)
+            num_lines = min(m + 1, 6)
+            ans_class = f"q-ans-{min(indent_level, 2)}"
             for _ in range(num_lines):
-                html_lines.append(f'<div class="answer-line {ans_class}"></div>')
+                html_lines.append(f'<div class="q-ans-line {ans_class}"></div>')
+            # Marks on separate right-aligned line
+            html_lines.append(f'<div class="q-marks">({marks})</div>')
+
         last_q = qnum
-        prev_indent_preview = indent_level
 
     html_lines.append("</div>")
     st.markdown("\n".join(html_lines), unsafe_allow_html=True)
@@ -530,162 +535,147 @@ def _set_run_font(run, bold=False, size_pt=11):
     rPr.insert(0, rFonts)
 
 
-def _add_answer_underline(document, left_indent_cm, num_lines=3):
-    """
-    Add answer lines as paragraphs with a paragraph bottom border.
-    left_indent_cm is a plain float (centimetres) — no .cm call needed.
-    """
-    for _ in range(num_lines):
-        p = document.add_paragraph()
-        pf = p.paragraph_format
-        pf.left_indent = Cm(left_indent_cm)
-        pf.right_indent = Cm(0.5)
-        pf.space_before = Pt(0)
-        pf.space_after = Pt(2)
-        pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement('w:pBdr')
-        bottom = OxmlElement('w:bottom')
-        bottom.set(qn('w:val'), 'single')
-        bottom.set(qn('w:sz'), '4')
-        bottom.set(qn('w:space'), '1')
-        bottom.set(qn('w:color'), '000000')
-        pBdr.append(bottom)
-        pPr.append(pBdr)
-        run = p.add_run("")
-        run.font.name = "Arial"
-        run.font.size = Pt(11)
-
-
 def build_formatted_docx(spec):
     """
-    Build a fully formatted A4 Word document (.docx) from FormattingAgent spec.
-    BUG FIX: All indentation is stored as plain cm floats to avoid the
-    'int object has no attribute cm' error caused by arithmetic on Length/EMU values.
+    Build a fully formatted A4 Word document matching AQA GCSE exam paper style.
+
+    Layout (matches reference):
+      • Question text on its own line with label (no inline marks)
+      • Answer lines as underscore-character paragraphs below the question
+      • Marks (n) on a separate RIGHT-ALIGNED BOLD paragraph after answer lines
+      • (Total for question X is Y marks) — right-aligned bold
+      • No paragraph borders on question text paragraphs
     """
     document = Document()
 
+    # --- Page setup (A4, 1.91cm side margins matching reference 1080 twips) ---
     section = document.sections[0]
     section.page_height = Cm(29.7)
-    section.page_width = Cm(21.0)
-    section.top_margin = Cm(2.54)
+    section.page_width  = Cm(21.0)
+    section.top_margin    = Cm(2.54)
     section.bottom_margin = Cm(2.54)
-    section.left_margin = Cm(1.91)
-    section.right_margin = Cm(1.91)
+    section.left_margin   = Cm(1.91)   # 1080 twips
+    section.right_margin  = Cm(1.91)   # 1080 twips
 
+    # --- Normal style ---
     style = document.styles["Normal"]
     style.font.name = "Arial"
     style.font.size = Pt(11)
-    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_after  = Pt(0)
     style.paragraph_format.space_before = Pt(0)
 
-    # Compute content width in EMU for tab stops (arithmetic on section props gives plain int/EMU)
-    content_width_emu = (
-        section.page_width - section.left_margin - section.right_margin
-    )
-    mark_tab_emu = content_width_emu - Cm(0.3)
+    # --- Indentation constants (cm, from reference XML) ---
+    # Level 0 (main question):  label starts at 0, text wraps at 0.7cm
+    # Level 1 ((a)(b)(c)):      label at 0.63cm (718-359 twips), text at 1.27cm
+    # Level 2 ((i)(ii)(iii)):   label at 1.27cm (1078-358 twips), text at 1.90cm
+    LABEL_CM = [0.0,  0.63, 1.27]
+    TEXT_CM  = [0.7,  1.27, 1.90]
 
-    # Use plain cm floats throughout — avoids any .cm attribute error
-    TEXT_INDENT_CM = [0.8, 1.5, 2.3]   # where text body starts
-    LEFT_INDENT_CM = [0.0, 0.8, 1.5]   # where label starts
+    # Answer line: underscore string filling ~17cm content width
+    # Reference uses 76 underscores at full width; indent reduces this proportionally
+    ANSWER_UNDERSCORES = {0: 76, 1: 72, 2: 68}
 
-    lines = spec.get("lines", [])
+    lines       = spec.get("lines", [])
     paper_total = spec.get("paper_total_marks")
-    last_q = None
+    last_q      = None
     prev_indent = None
 
-    def add_question_paragraph(label, label_bold, text_content, marks, indent_level, space_before_pt):
+    def _para(space_before_pt=0, space_after_pt=0,
+               left_cm=0.0, hanging_cm=0.0,
+               align=WD_ALIGN_PARAGRAPH.LEFT):
         p = document.add_paragraph()
         pf = p.paragraph_format
         pf.space_before = Pt(space_before_pt)
-        pf.space_after = Pt(0)
-
-        li_cm = LEFT_INDENT_CM[indent_level]
-        ti_cm = TEXT_INDENT_CM[indent_level]
-        pf.left_indent = Cm(ti_cm)
-        pf.first_line_indent = Cm(-(ti_cm - li_cm))
-
-        pf.tab_stops.clear_all()
-        pf.tab_stops.add_tab_stop(Cm(ti_cm), WD_TAB_ALIGNMENT.LEFT)
-        pf.tab_stops.add_tab_stop(mark_tab_emu, WD_TAB_ALIGNMENT.RIGHT)
-
-        if label:
-            r = p.add_run(label)
-            _set_run_font(r, bold=label_bold)
-            p.add_run("\t")
-        r2 = p.add_run(text_content)
-        _set_run_font(r2, bold=False)
-        if marks:
-            p.add_run("\t")
-            r3 = p.add_run(f"({marks})")
-            _set_run_font(r3, bold=True)
+        pf.space_after  = Pt(space_after_pt)
+        pf.alignment    = align
+        if left_cm:
+            pf.left_indent = Cm(left_cm)
+        if hanging_cm:
+            pf.first_line_indent = Cm(-hanging_cm)
         return p
 
     for line in lines:
-        qnum = line.get("question_number")
+        qnum        = line.get("question_number")
         indent_level = int(line.get("indent_level", 0))
-        part_label = line.get("part_label") or ""
-        subpart_label = line.get("subpart_label") or ""
-        question_text = line.get("question_text") or ""
-        # Sanitise: if AI wrote literal "None" or "none", treat as empty
+        part_label   = line.get("part_label")   or ""
+        subpart_label= line.get("subpart_label") or ""
+        question_text= line.get("question_text") or ""
         if question_text.strip().lower() == "none":
             question_text = ""
-        marks = line.get("marks")
+        marks    = line.get("marks")
         is_total = bool(line.get("is_total_for_question"))
 
+        # ── (Total for question X) ──────────────────────────────────────────
         if is_total:
-            p = document.add_paragraph()
-            p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(8)
+            p = _para(space_before_pt=4, space_after_pt=12,
+                      align=WD_ALIGN_PARAGRAPH.RIGHT)
             r = p.add_run(f"(Total for question {qnum} is {marks} marks)")
             _set_run_font(r, bold=True)
             last_q = qnum
             prev_indent = None
             continue
 
+        # ── Spacing before this paragraph ───────────────────────────────────
         if indent_level == 0:
-            sp_before = 16 if (last_q is not None and qnum != last_q) else 0
+            sp = 14 if (last_q is not None and qnum != last_q) else 0
         elif indent_level == 1:
-            # Space before (b), (c) etc. — but NOT right after a main question stem
-            sp_before = 8 if (prev_indent is not None and prev_indent != 0 and last_q == qnum) else 2
-        elif indent_level == 2:
-            sp_before = 4
-        else:
-            sp_before = 0
+            sp = 6 if (prev_indent is not None and prev_indent != 0) else 2
+        else:  # level 2
+            sp = 2
 
-        # If indent_level=0 has no text and no marks, still render the question number
-        # (never skip — question numbers must always appear)
-
-        if indent_level == 0 and qnum:
-            label, label_bold = qnum, False          # question numbers: plain
+        # ── Label ───────────────────────────────────────────────────────────
+        if   indent_level == 0 and qnum:
+            label = qnum
+            label_bold = False
         elif indent_level == 1 and part_label:
-            label, label_bold = part_label, True     # (a), (b): bold
+            label = part_label
+            label_bold = True
         elif indent_level >= 2 and (subpart_label or part_label):
-            label, label_bold = (subpart_label or part_label), True  # (ii): bold
+            label = subpart_label or part_label
+            label_bold = True
         else:
-            label, label_bold = "", False
+            label = ""
+            label_bold = False
 
-        add_question_paragraph(
-            label=label, label_bold=label_bold,
-            text_content=question_text, marks=marks,
-            indent_level=min(indent_level, 2), space_before_pt=sp_before,
-        )
+        # ── Question text paragraph ─────────────────────────────────────────
+        lvl = min(indent_level, 2)
+        p = _para(space_before_pt=sp, space_after_pt=0,
+                  left_cm=TEXT_CM[lvl], hanging_cm=TEXT_CM[lvl] - LABEL_CM[lvl])
+        if label:
+            r_lbl = p.add_run(label + "  ")
+            _set_run_font(r_lbl, bold=label_bold)
+        if question_text:
+            r_txt = p.add_run(question_text)
+            _set_run_font(r_txt, bold=False)
 
+        # ── Answer lines (underscore text) ──────────────────────────────────
         if marks and marks > 0:
             m = int(marks)
-            # marks+1 lines, capped at 5 for high-mark questions
-            num_ans = min(m + 1, 5)
-            # Use the plain cm float directly — no .cm call on any object
-            ans_indent_cm = TEXT_INDENT_CM[min(indent_level, 2)]
-            _add_answer_underline(document, ans_indent_cm, num_ans)
+            num_ans = min(m + 1, 6)
+            underscores = "_" * ANSWER_UNDERSCORES.get(lvl, 72)
 
-        last_q = qnum
+            for i in range(num_ans):
+                ap = _para(space_before_pt=0, space_after_pt=0,
+                           left_cm=TEXT_CM[lvl])
+                r = ap.add_run(underscores)
+                _set_run_font(r, bold=False)
+
+            # ── Marks on their own right-aligned line ────────────────────────
+            mp = _para(space_before_pt=0, space_after_pt=2,
+                       left_cm=TEXT_CM[lvl],
+                       align=WD_ALIGN_PARAGRAPH.RIGHT)
+            r_m = mp.add_run(f"({marks})")
+            _set_run_font(r_m, bold=True)
+
+        last_q      = qnum
         prev_indent = indent_level
 
+    # ── Paper total ─────────────────────────────────────────────────────────
     if paper_total:
-        p = document.add_paragraph()
-        p.paragraph_format.space_before = Pt(16)
-        r = p.add_run(f"Total for paper = {paper_total} marks")
+        p = _para(space_before_pt=14, align=WD_ALIGN_PARAGRAPH.RIGHT)
+        r = p.add_run(f"Total marks for question paper: {paper_total}")
         _set_run_font(r, bold=True)
+        r.underline = True
 
     bio = BytesIO()
     document.save(bio)
