@@ -235,10 +235,81 @@ Before finalising, you MUST ensure:
 3. If narrative implies energy conservation or linked processes, magnitudes must be physically coherent.
 4. Units are correct and realistic.
 5. No physics contradictions exist.
-6. Total marks remain consistent unless change is justified.
+6. Total marks in the worksheet MUST exactly match total marks in the mark scheme for every single question and sub-question. Double-check every question individually.
 7. Revised version stays within intended topic scope.
 
 If inconsistencies are found, correct them logically.
+
+--------------------------------------------------
+QUESTION WRITING RULES
+--------------------------------------------------
+
+1. NUMBERS AS WORDS: In question text, write numbers as words unless they are physical values or units.
+   - WRONG: "A car travels for 3 seconds"
+   - CORRECT: "A car travels for three seconds"
+   - EXCEPTION: "A car travels at 12 m/s for 3.0 s" — keep physical values as numerals.
+
+2. CONTEXT STATEMENTS: Use judgment about when to include an opening context statement.
+   - If a question already has a context/scenario introduction, ALWAYS enrich it: make it
+     more specific, vivid and scientifically detailed — 2–4 sentences with named values,
+     realistic conditions, and a clear scenario that draws the student in.
+   - If a question has no context but would benefit from one (e.g. it involves a practical,
+     a calculation, a comparison, or a multi-part investigation), ADD a well-crafted one.
+   - Do NOT add a context to simple standalone recall questions (e.g. "Define osmosis.",
+     "State two uses of ultrasound.") — these are self-contained and need no introduction.
+   - NEVER write vague one-liners. If you add a context, it must be meaningful and specific.
+   - WRONG context: "A student does an experiment."
+   - RIGHT context: "Priya investigates how changing the concentration of hydrochloric acid
+     affects the rate of reaction with marble chips. She measures the volume of CO₂ produced
+     every 30 seconds using a gas syringe connected to a conical flask."
+
+3. IMAGE PLACEHOLDERS: If a question would normally include a diagram (e.g. a circuit diagram,
+   force arrow diagram, graph, apparatus setup), write a placeholder on its own line:
+   [Image: brief description of what the diagram should show]
+   Example: [Image: diagram of a simple series circuit with a battery, switch, and resistor]
+
+4. NO TOPIC HEADERS: Do not include topic headers like "Work and Energy Transfers" — only clean question structures.
+
+5. NO STRANGE AI WORDING: Every sentence should read naturally as a real GCSE exam question.
+
+--------------------------------------------------
+MARK SCHEME RULES
+--------------------------------------------------
+
+1. KEEP IT SHORT: Every marking point must be a SHORT, concise phrase — not a full paragraph.
+   Write exactly what a mark scheme in a real GCSE exam paper would say.
+   - WRONG: "The student should state that the force acting on the wire is caused by the
+     interaction between the magnetic field of the wire and the external magnetic field,
+     which results in a force being exerted on the conductor."
+   - CORRECT: "Force on wire due to interaction between two magnetic fields. (1)"
+
+2. (1) AFTER EVERY POINT: Every individual marking point that awards one mark must end with (1).
+   Never group multiple marks together as (2) or (3).
+   - WRONG: "Correct substitution and final answer (2)"
+   - CORRECT: "Substitutes values correctly into equation. (1)\nCorrect answer with units. (1)"
+
+3. MULTIPLE ANSWERS — "Any X from:": When a question has several possible acceptable answers,
+   use EXACTLY this format:
+   Any one from:
+   • [answer option] (1)
+   • [answer option] (1)
+   OR for two or more required answers:
+   Any two from:
+   • [answer option] (1)
+   • [answer option] (1)
+   • [answer option] (1)
+   Use "OR" between two alternatives on the same line only when exactly one of two specific
+   answers is acceptable.
+
+4. CAPITALISATION: Only the first letter of each marking point sentence is capitalised.
+   - WRONG: "The Wire Experiences A Force."
+   - CORRECT: "The wire experiences a force. (1)"
+
+5. NO EQUATIONS AS MARKS: Do not award a mark purely for writing an equation in calculation
+   questions. Marks are for substitution and correct answer.
+
+6. SIDE NOTES: Any accept/reject/note guidance should be in italics formatting — write as:
+   [Note: accept X instead of Y] on a new line after the relevant mark point.
 
 --------------------------------------------------
 SCOPE ENFORCEMENT AND MARK THRESHOLD
@@ -294,6 +365,8 @@ Do NOT:
 - Inflate total marks excessively.
 - Remove core assessed skills.
 - Rewrite purely stylistically without justification.
+- Write long, over-explained mark scheme answers.
+- Use "=" or "-" as separators in mark scheme lines; use ":" instead where needed.
 
 --------------------------------------------------
 REVISION PRINCIPLES
@@ -433,4 +506,9 @@ ADDITIONAL RULES:
 - paper_total_marks MUST match the sum of all question totals; do NOT change it.
 - The response MUST be valid JSON parseable by a strict JSON parser.
 - No trailing commas. No extra keys. No additional commentary outside the JSON.
+- CRITICAL: question_text MUST always be a string — NEVER null, never JSON null.
+  If a main question line (indent_level 0) has no introductory text, set question_text to "".
+  NEVER output the string "None", "N/A", "null", or any placeholder — use "" (empty string) instead.
+- If indent_level=0 line has no question text (the question goes straight to sub-parts),
+  still include the line with question_text: "" so question_number is tracked.
 """

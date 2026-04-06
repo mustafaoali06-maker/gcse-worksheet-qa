@@ -74,16 +74,10 @@ hr { border-color: #2a2f3e; }
 """, unsafe_allow_html=True)
 
 # ---------------- HEADER ----------------
-_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56" width="56" height="56">
-  <rect width="56" height="56" rx="10" fill="#f39c12"/>
-  <rect x="8" y="8" width="40" height="40" rx="6" fill="#0e1117"/>
-  <text x="28" y="23" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="11" fill="#f39c12">GCSE</text>
-  <line x1="10" y1="28" x2="46" y2="28" stroke="#f39c12" stroke-width="1.5" opacity="0.4"/>
-  <text x="28" y="40" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="8.5" fill="#ffffff" letter-spacing="1">STUDIO</text>
-</svg>"""
+_LOGO_B64 = "data:image/png;base64,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"
 st.markdown(f"""
 <div class="app-header">
-    {_LOGO_SVG}
+    <img src="{_LOGO_B64}" alt="examqa.com logo" style="height:56px;object-fit:contain;" />
     <span class="app-header-title">GCSE Worksheet QA Studio</span>
 </div>
 """, unsafe_allow_html=True)
@@ -443,24 +437,40 @@ def render_formatted_preview(spec):
     font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4;
 }
 .q-stem   { margin-top: 20px; padding-left: 0; }
-.q-part   { margin-top: 6px;  padding-left: 22px; }
-.q-roman  { margin-top: 4px;  padding-left: 44px; }
+.q-part   { margin-top: 10px; padding-left: 22px; }
+.q-roman  { margin-top: 8px;  padding-left: 44px; }
 .q-text   { color: #111; }
 .q-ans-line {
     border-bottom: 1px solid #555;
     height: 18px; margin: 3px 0;
 }
-.q-ans-0  { margin-left: 0;   margin-right: 0; }
-.q-ans-1  { margin-left: 22px; margin-right: 0; }
-.q-ans-2  { margin-left: 44px; margin-right: 0; }
+.q-ans-0  { margin-left: 0;    margin-right: 0; }
+.q-ans-1  { margin-left: 11px; margin-right: 0; }
+.q-ans-2  { margin-left: 22px; margin-right: 0; }
 .q-marks  { text-align: right; font-weight: bold; color: #111;
             padding-left: 22px; margin-top: 2px; }
 .q-total  { text-align: right; font-weight: bold; color: #111;
             margin-top: 8px; margin-bottom: 16px; }
+/* Continuation lines for context+command-word splits — aligned to text start */
+.q-cont-0 { padding-left: 24px;  margin-top: 1px; }
+.q-cont-1 { padding-left: 46px;  margin-top: 1px; }
+.q-cont-2 { padding-left: 68px;  margin-top: 1px; }
 </style>""", unsafe_allow_html=True)
+
+    # Regex to auto-split a context sentence from a command word.
+    # Matches a command word that immediately follows sentence-ending punctuation.
+    _CMD_SPLIT_RE = re.compile(
+        r'(?<=[.?!])\s+(Calculate|Explain|State|Describe|Determine|Show|Find|'
+        r'Compare|Evaluate|Suggest|Identify|Give|Write|Draw|Plot|Predict|Justify|'
+        r'Define|Outline|Use|Work\s+out|Complete|Name|Tick|Circle|Underline|Label)\b',
+        re.IGNORECASE
+    )
 
     html_lines = ['<div class="worksheet-preview">']
     last_q = None
+    _COMB_RE = re.compile(r'^\(([a-z])\) \(([ivxlcdm]+)\)$', re.IGNORECASE)
+    _seen_roman_parents: dict = {}  # {qnum: set_of_parent_letters_already_shown}
+    _orphan_qnum = None  # level-0 number with no text — merged onto next line
 
     for line in lines:
         qnum = line.get("question_number")
@@ -479,36 +489,82 @@ def render_formatted_preview(spec):
                 f'(Total for question {qnum} is {marks} marks)</div>'
             )
             last_q = qnum
+            _orphan_qnum = None
             continue
 
+        # Level-0 items with no question text are just question numbers (e.g. "1").
+        # Save the number and merge it onto the next line so "1  (a)(i)  text"
+        # all appear together instead of "1" alone on its own line.
+        if indent_level == 0 and not question_text.strip():
+            _orphan_qnum = qnum
+            last_q = qnum
+            continue
+
+        # ── Roman numeral de-duplication ────────────────────────────────────
+        _eff_level = indent_level
+        _eff_label = part_label
+        if indent_level == 1:
+            _mc = _COMB_RE.match(part_label)
+            if _mc:
+                _parent = _mc.group(1)
+                _roman  = _mc.group(2)
+                _seen_roman_parents.setdefault(qnum, set())
+                if _parent in _seen_roman_parents[qnum]:
+                    _eff_level = 2
+                    _eff_label = f"({_roman})"
+                else:
+                    _seen_roman_parents[qnum].add(_parent)
+
+        # ── Merge orphan question number ─────────────────────────────────────
+        # If the previous level-0 had no text, prepend its number to this label.
+        _ans_level = _eff_level  # used for answer-line indentation
+        if _orphan_qnum is not None:
+            _eff_label = (f"{_orphan_qnum}  {_eff_label}" if _eff_label
+                          else str(_orphan_qnum))
+            _eff_level = 0   # render the merged line at stem indentation
+            _orphan_qnum = None
+
         # CSS class for indent level
-        if indent_level == 0:
+        if _eff_level == 0:
             div_class = "q-stem"
-        elif indent_level == 1:
+        elif _eff_level == 1:
             div_class = "q-part"
         else:
             div_class = "q-roman"
 
-        # Build label
-        if indent_level == 0 and qnum:
-            label_html = f'<strong>{qnum}</strong>&nbsp;&nbsp;'
-        elif indent_level == 1 and part_label:
-            label_html = f'<strong>{part_label}</strong>&nbsp;'
-        elif indent_level >= 2 and (subpart_label or part_label):
-            label_html = f'<strong>{subpart_label or part_label}</strong>&nbsp;'
+        # Build label (plain text — no bold per AQA exam style)
+        if _eff_level == 0:
+            lbl = _eff_label or (str(qnum) if qnum else "")
+            label_html = f'{lbl}&nbsp;&nbsp;' if lbl else ""
+        elif _eff_level == 1 and _eff_label:
+            label_html = f'{_eff_label}&nbsp;'
+        elif _eff_level >= 2 and (subpart_label or _eff_label):
+            label_html = f'{subpart_label or _eff_label}&nbsp;'
         else:
             label_html = ""
 
-        # Question text (no inline marks)
-        html_lines.append(
-            f'<div class="{div_class} q-text">{label_html}{question_text}</div>'
+        # Auto-split context sentence from command word, then handle any \n in text
+        question_text = _CMD_SPLIT_RE.sub(
+            lambda m: '\n' + m.group(0).lstrip(), question_text
         )
+        _qt_parts = [s for s in question_text.split('\n') if s.strip()]
+
+        # First part: rendered with label
+        _first = _qt_parts[0] if _qt_parts else ""
+        html_lines.append(
+            f'<div class="{div_class} q-text">{label_html}{_first}</div>'
+        )
+        # Continuation parts (command words) aligned to text-start position
+        _cont_cls = f"q-cont-{min(_ans_level, 2)}"
+        for _qtp in _qt_parts[1:]:
+            html_lines.append(f'<div class="{_cont_cls} q-text">{_qtp}</div>')
 
         # Answer lines + marks below
+        # Line count: 1 mark=1 line, 2=2, 3=3, 4=4, 5=5, 6+=6 (max 6)
         if marks and marks > 0:
             m = int(marks)
-            num_lines = min(m + 1, 6)
-            ans_class = f"q-ans-{min(indent_level, 2)}"
+            num_lines = min(m, 6)
+            ans_class = f"q-ans-{min(_ans_level, 2)}"
             for _ in range(num_lines):
                 html_lines.append(f'<div class="q-ans-line {ans_class}"></div>')
             # Marks on separate right-aligned line
@@ -571,14 +627,26 @@ def build_formatted_docx(spec):
     LABEL_CM = [0.0,  0.63, 1.27]
     TEXT_CM  = [0.7,  1.27, 1.90]
 
-    # Answer line: underscore string filling ~17cm content width
-    # Reference uses 76 underscores at full width; indent reduces this proportionally
-    ANSWER_UNDERSCORES = {0: 76, 1: 72, 2: 68}
+    # Answer line: underscore string filling ~17cm content width.
+    # Lines start at LABEL_CM (not TEXT_CM) so they begin under the label letter/roman.
+    # Counts adjusted for the wider start position (LABEL_CM is further left than TEXT_CM).
+    ANSWER_UNDERSCORES = {0: 76, 1: 74, 2: 70}
 
-    lines       = spec.get("lines", [])
-    paper_total = spec.get("paper_total_marks")
-    last_q      = None
-    prev_indent = None
+    # Auto-split context sentence from command word inside question_text
+    _CMD_SPLIT_D = re.compile(
+        r'(?<=[.?!])\s+(Calculate|Explain|State|Describe|Determine|Show|Find|'
+        r'Compare|Evaluate|Suggest|Identify|Give|Write|Draw|Plot|Predict|Justify|'
+        r'Define|Outline|Use|Work\s+out|Complete|Name|Tick|Circle|Underline|Label)\b',
+        re.IGNORECASE
+    )
+
+    lines         = spec.get("lines", [])
+    paper_total   = spec.get("paper_total_marks")
+    last_q        = None
+    prev_indent   = None
+    _COMB_RE_D    = re.compile(r'^\(([a-z])\) \(([ivxlcdm]+)\)$', re.IGNORECASE)
+    _seen_roman_d: dict = {}  # {qnum: set_of_parent_letters_already_shown}
+    _orphan_qnum_d = None  # level-0 number with no text — merged onto next line
 
     def _para(space_before_pt=0, space_after_pt=0,
                left_cm=0.0, hanging_cm=0.0,
@@ -613,62 +681,118 @@ def build_formatted_docx(spec):
             _set_run_font(r, bold=True)
             last_q = qnum
             prev_indent = None
+            _orphan_qnum_d = None
             continue
 
-        # ── Spacing before this paragraph ───────────────────────────────────
-        if indent_level == 0:
-            sp = 14 if (last_q is not None and qnum != last_q) else 0
-        elif indent_level == 1:
-            sp = 6 if (prev_indent is not None and prev_indent != 0) else 2
-        else:  # level 2
-            sp = 2
+        # ── Level-0 items with no text — save number to merge onto next line ─
+        if indent_level == 0 and not question_text.strip():
+            _orphan_qnum_d = qnum
+            last_q = qnum
+            continue
 
-        # ── Label ───────────────────────────────────────────────────────────
-        if   indent_level == 0 and qnum:
-            label = qnum
-            label_bold = False
-        elif indent_level == 1 and part_label:
-            label = part_label
-            label_bold = True
-        elif indent_level >= 2 and (subpart_label or part_label):
-            label = subpart_label or part_label
-            label_bold = True
+        # ── Roman numeral de-duplication ────────────────────────────────────
+        _eff_indent = indent_level
+        _eff_part   = part_label
+        if indent_level == 1:
+            _mcd = _COMB_RE_D.match(part_label)
+            if _mcd:
+                _parent_d = _mcd.group(1)
+                _roman_d  = _mcd.group(2)
+                _seen_roman_d.setdefault(qnum, set())
+                if _parent_d in _seen_roman_d[qnum]:
+                    _eff_indent = 2
+                    _eff_part   = f"({_roman_d})"
+                else:
+                    _seen_roman_d[qnum].add(_parent_d)
+
+        # ── Merge orphan question number ─────────────────────────────────────
+        _ans_lvl_d = _eff_indent  # separate tracker for answer-line indent
+        if _orphan_qnum_d is not None:
+            _eff_part   = (f"{_orphan_qnum_d}  {_eff_part}" if _eff_part
+                           else str(_orphan_qnum_d))
+            _eff_indent = 0   # render merged line at stem indentation
+            _orphan_qnum_d = None
+
+        # ── Spacing before this paragraph ───────────────────────────────────
+        if _eff_indent == 0:
+            sp = 14 if (last_q is not None and qnum != last_q) else 0
+        elif _eff_indent == 1:
+            sp = 10 if (prev_indent is not None and prev_indent != 0) else 6
+        else:  # level 2
+            sp = 8
+
+        # ── Label (plain text — no bold per AQA exam style) ─────────────────
+        if _eff_indent == 0:
+            label      = _eff_part or (str(qnum) if qnum else "")
+        elif _eff_indent == 1 and _eff_part:
+            label = _eff_part
+        elif _eff_indent >= 2 and (subpart_label or _eff_part):
+            label = subpart_label or _eff_part
         else:
             label = ""
-            label_bold = False
+        label_bold = False  # AQA style: labels are plain, not bold
 
         # ── Question text paragraph ─────────────────────────────────────────
-        lvl = min(indent_level, 2)
-        p = _para(space_before_pt=sp, space_after_pt=0,
-                  left_cm=TEXT_CM[lvl], hanging_cm=TEXT_CM[lvl] - LABEL_CM[lvl])
+        lvl = min(_eff_indent, 2)
+        # For merged orphan items (_eff_indent forced to 0 but child level tracked in
+        # _ans_lvl_d), use the child level's TEXT_CM as the wrap-back point so
+        # continuation lines align under the first word, not under the "1" label.
+        _child_lvl = min(_ans_lvl_d, 2)
+        if lvl == 0 and _child_lvl > 0:
+            # Was a merged orphan — wrap at child TEXT_CM
+            _left_cm = TEXT_CM[_child_lvl]
+            _hang_cm = TEXT_CM[_child_lvl]  # first line at 0, wrap at TEXT_CM[child]
+        else:
+            _left_cm = TEXT_CM[lvl]
+            _hang_cm = TEXT_CM[lvl] - LABEL_CM[lvl]
+        # Auto-split context sentence from command word, then handle \n splits
+        question_text = _CMD_SPLIT_D.sub(
+            lambda m: '\n' + m.group(0).lstrip(), question_text
+        )
+        _qt_parts = [s for s in question_text.split('\n') if s.strip()]
+
+        # First paragraph — label + first part of question text
+        qp = _para(space_before_pt=sp, space_after_pt=0,
+                   left_cm=_left_cm, hanging_cm=_hang_cm)
         if label:
-            r_lbl = p.add_run(label + "  ")
+            r_lbl = qp.add_run(label + "  ")
             _set_run_font(r_lbl, bold=label_bold)
-        if question_text:
-            r_txt = p.add_run(question_text)
+        if _qt_parts:
+            r_txt = qp.add_run(_qt_parts[0])
             _set_run_font(r_txt, bold=False)
+
+        # Continuation paragraphs (command word lines) — no hanging indent,
+        # start at TEXT_CM[lvl] so they align with the first word above.
+        for _qtp in _qt_parts[1:]:
+            cp = _para(space_before_pt=0, space_after_pt=0,
+                       left_cm=TEXT_CM[min(_eff_indent, 2)])
+            r_cp = cp.add_run(_qtp)
+            _set_run_font(r_cp, bold=False)
 
         # ── Answer lines (underscore text) ──────────────────────────────────
         if marks and marks > 0:
             m = int(marks)
-            num_ans = min(m + 1, 6)
-            underscores = "_" * ANSWER_UNDERSCORES.get(lvl, 72)
+            num_ans = min(m, 6)  # 1 mark=1 line, 2=2, ..., 6+=6
+            # Use _ans_lvl_d for underscore count/indent so merged lines still
+            # get the correct answer-line width (not the collapsed lvl=0 width).
+            _alvl = min(_ans_lvl_d, 2)
+            underscores = "_" * ANSWER_UNDERSCORES.get(_alvl, 72)
 
             for i in range(num_ans):
                 ap = _para(space_before_pt=0, space_after_pt=0,
-                           left_cm=TEXT_CM[lvl])
+                           left_cm=LABEL_CM[_alvl])
                 r = ap.add_run(underscores)
                 _set_run_font(r, bold=False)
 
             # ── Marks on their own right-aligned line ────────────────────────
             mp = _para(space_before_pt=0, space_after_pt=2,
-                       left_cm=TEXT_CM[lvl],
+                       left_cm=LABEL_CM[_alvl],
                        align=WD_ALIGN_PARAGRAPH.RIGHT)
             r_m = mp.add_run(f"({marks})")
             _set_run_font(r_m, bold=True)
 
         last_q      = qnum
-        prev_indent = indent_level
+        prev_indent = _eff_indent
 
     # ── Paper total ─────────────────────────────────────────────────────────
     if paper_total:
@@ -908,12 +1032,23 @@ if run_button and worksheet_file:
         unsafe_allow_html=True,
     )
 
+    # Derive default download filenames from the uploaded worksheet filename.
+    # Replace "QP" with "MS" (case-insensitive) for the mark scheme name.
+    _ws_fname_default = getattr(worksheet_file, "name", "gcse_worksheet_formatted.docx")
+    _ms_fname_default = re.sub(r'\bQP\b', 'MS', _ws_fname_default, flags=re.IGNORECASE)
+    if _ms_fname_default == _ws_fname_default:
+        # No "QP" found — append _MS before .docx
+        _ms_fname_default = re.sub(r'(\.docx)$', '_MS\\1', _ws_fname_default,
+                                   flags=re.IGNORECASE) or _ws_fname_default.replace('.docx', '_MS.docx')
+
     st.session_state.update({
         "worksheet_text": worksheet_text,
         "markscheme_text": markscheme_text,
         "improved_ws": improved_ws,
         "improved_ms": improved_ms,
         "spec_text": spec_text,
+        "ws_fname": _ws_fname_default,
+        "ms_fname": _ms_fname_default,
     })
     for k in ("fmt_spec", "fmt_docx_bytes", "ms_docx_bytes"):
         st.session_state.pop(k, None)
@@ -929,6 +1064,13 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
     improved_ws = st.session_state.get("improved_ws", "")
     improved_ms = st.session_state.get("improved_ms", "")
     spec_text = st.session_state.get("spec_text", "")
+
+    # Apply any AI-pending updates to widget keys BEFORE the text area widgets
+    # render — Streamlit forbids setting a widget key after that widget renders.
+    if "_ws_pending" in st.session_state:
+        st.session_state["ws_editor"] = st.session_state.pop("_ws_pending")
+    if "_ms_pending" in st.session_state:
+        st.session_state["ms_editor"] = st.session_state.pop("_ms_pending")
 
     st.markdown("---")
     st.subheader("Enhanced Worksheet")
@@ -1034,6 +1176,28 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
         override_ok = st.checkbox("Proceed with export despite QA warnings", key="fmt_override")
 
     if override_ok:
+        # ── Filename inputs ──────────────────────────────────────────────────
+        st.markdown("#### Output Filenames")
+        st.markdown(
+            "<div style='color:#9ca3af;font-size:12px;margin-bottom:6px'>"
+            "Edit the filenames below before downloading. "
+            "The mark scheme name is auto-derived by replacing QP with MS.</div>",
+            unsafe_allow_html=True,
+        )
+        _fcol1, _fcol2 = st.columns(2)
+        with _fcol1:
+            _ws_fname = st.text_input(
+                "Worksheet filename",
+                value=st.session_state.get("ws_fname", "gcse_worksheet_formatted.docx"),
+                key="ws_fname_input",
+            )
+        with _fcol2:
+            _ms_fname = st.text_input(
+                "Mark scheme filename",
+                value=st.session_state.get("ms_fname", "gcse_markscheme_formatted.docx"),
+                key="ms_fname_input",
+            )
+
         st.markdown("#### Formatted Worksheet")
         if st.button("Generate Formatted Worksheet (.docx)", key="fmt_ws"):
             with st.spinner("Running FormattingAgent — structuring layout..."):
@@ -1050,7 +1214,7 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             st.download_button(
                 label="⬇  Download Worksheet (.docx)",
                 data=st.session_state["fmt_docx_bytes"],
-                file_name="gcse_worksheet_formatted.docx",
+                file_name=_ws_fname or "gcse_worksheet_formatted.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 key="dl_ws",
             )
@@ -1069,7 +1233,7 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
             st.download_button(
                 label="⬇  Download Mark Scheme (.docx)",
                 data=st.session_state["ms_docx_bytes"],
-                file_name="gcse_markscheme_formatted.docx",
+                file_name=_ms_fname or "gcse_markscheme_formatted.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 key="dl_ms",
             )
@@ -1112,7 +1276,8 @@ JSON schema:
 Rules:
 - Use action "modify" when making any edit to the worksheet or mark scheme.
 - Use action "info" for questions, explanations or when no edit is needed (changes array will be empty).
-- Set rerun_pipeline to true ONLY for large global changes (e.g. rename student name throughout, change topic, restructure all questions). For individual question edits set it to false.
+- Set rerun_pipeline to FALSE for virtually everything: renaming a student/character, changing a command word (e.g. "state" → "explain"), fixing a number, rewording a question, correcting a mark allocation, or any targeted single edit.
+- Set rerun_pipeline to TRUE ONLY when the user explicitly asks to REGENERATE or COMPLETELY RESTRUCTURE the whole worksheet from scratch — e.g. "change the topic to waves", "add five new questions", "rebuild the whole worksheet". Simple word/name/phrasing changes are NEVER a reason to rerun the pipeline.
 - "find" must be an exact verbatim substring of the current document — copy it exactly.
 - "replace" is the new text that replaces that exact substring.
 - You may include multiple change objects in the changes array (e.g. one for worksheet, one for markscheme).
@@ -1211,6 +1376,10 @@ if _send and _user_input.strip():
         if _applied_count > 0:
             st.session_state["improved_ws"] = _new_ws
             st.session_state["improved_ms"] = _new_ms
+            # Queue widget-key updates via pending vars (consumed BEFORE text_area
+            # widgets render on the next rerun, avoiding StreamlitAPIException).
+            st.session_state["_ws_pending"] = _new_ws
+            st.session_state["_ms_pending"] = _new_ms
             # Clear cached export bytes so they regenerate
             for _k in ("fmt_spec", "fmt_docx_bytes", "ms_docx_bytes"):
                 st.session_state.pop(_k, None)
