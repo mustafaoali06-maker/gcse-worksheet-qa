@@ -630,7 +630,7 @@ def build_formatted_docx(spec):
     # Answer line: underscore string filling ~17cm content width.
     # Lines start at LABEL_CM (not TEXT_CM) so they begin under the label letter/roman.
     # Counts adjusted for the wider start position (LABEL_CM is further left than TEXT_CM).
-    ANSWER_UNDERSCORES = {0: 76, 1: 74, 2: 70}
+    ANSWER_UNDERSCORES = {0: 85, 1: 82, 2: 78}
 
     # Auto-split context sentence from command word inside question_text
     _CMD_SPLIT_D = re.compile(
@@ -715,7 +715,7 @@ def build_formatted_docx(spec):
 
         # ── Spacing before this paragraph ───────────────────────────────────
         if _eff_indent == 0:
-            sp = 14 if (last_q is not None and qnum != last_q) else 0
+            sp = 22 if (last_q is not None and qnum != last_q) else 0
         elif _eff_indent == 1:
             sp = 10 if (prev_indent is not None and prev_indent != 0) else 6
         else:  # level 2
