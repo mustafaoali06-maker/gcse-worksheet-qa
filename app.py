@@ -30,45 +30,61 @@ ANSWER_LINE = "_________________________________________________________________
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
 
-# ---------------- THEME VARIABLES ----------------
+# ---------------- THEME VARIABLES (Figma design tokens) ----------------
 _DM = st.session_state["dark_mode"]
 
 if _DM:
-    _bg          = "#0d1117"
-    _surface     = "#161b27"
+    # Dark theme
+    _bg          = "#0f1117"
+    _surface     = "#1a1f2e"
     _surface2    = "#1e2535"
     _border      = "#2a3248"
     _border2     = "#374151"
     _text        = "#e8ecf4"
+    _text_mid    = "#9ca3af"
     _text_muted  = "#8b95a8"
-    _accent      = "#f5a623"
-    _accent2     = "#e08e0b"
+    _text_light  = "#6b7280"
+    _primary     = "#3b82f6"
+    _primary_lt  = "#1e3a5f"
+    _primary_dk  = "#2563eb"
     _success     = "#22c55e"
+    _success_lt  = "#052e16"
     _error       = "#ef4444"
+    _violet      = "#a78bfa"
+    _violet_lt   = "#2d1f4e"
     _card_bg     = "#1a1f2e"
-    _pill_bg     = "#252d3d"
-    _header_grad = "linear-gradient(135deg, #0d1117 0%, #161b27 50%, #1a2035 100%)"
-    _shadow      = "0 4px 24px rgba(0,0,0,0.5)"
+    _code_bg     = "#161b27"
+    _shadow      = "0 4px 24px rgba(0,0,0,0.45)"
     _shadow_sm   = "0 2px 8px rgba(0,0,0,0.3)"
+    _nav_bg      = "#1a1f2e"
+    _sb_bg       = "#161b27"
 else:
-    _bg          = "#f4f6fb"
+    # Light theme (Figma design)
+    _bg          = "#f8f9fc"
     _surface     = "#ffffff"
     _surface2    = "#eef1f8"
-    _border      = "#dde1ec"
-    _border2     = "#c8cdd9"
-    _text        = "#1a1e2d"
+    _border      = "#e5e8ee"
+    _border2     = "#d1d5db"
+    _text        = "#111827"
+    _text_mid    = "#4e5c73"
     _text_muted  = "#6b7280"
-    _accent      = "#e07b00"
-    _accent2     = "#c96c00"
+    _text_light  = "#9eaabb"
+    _primary     = "#2563eb"
+    _primary_lt  = "#eff4ff"
+    _primary_dk  = "#1d4ed8"
     _success     = "#16a34a"
+    _success_lt  = "#ecfdf5"
     _error       = "#dc2626"
+    _violet      = "#7c3aed"
+    _violet_lt   = "#f5f3ff"
     _card_bg     = "#ffffff"
-    _pill_bg     = "#f0f2f9"
-    _header_grad = "linear-gradient(135deg, #1a1e2d 0%, #252d4a 60%, #1a2035 100%)"
-    _shadow      = "0 4px 24px rgba(0,0,0,0.12)"
-    _shadow_sm   = "0 2px 8px rgba(0,0,0,0.07)"
+    _code_bg     = "#f5f6fa"
+    _shadow      = "0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06)"
+    _shadow_sm   = "0 1px 2px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.04)"
+    _nav_bg      = "#ffffff"
+    _sb_bg       = "#fafbfe"
 
-# ---------------- STYLE ----------------
+# ---------------- STYLE (matches Figma design) ----------------
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -76,134 +92,218 @@ st.markdown(f"""
 html, body, [class*="css"] {{
     background-color: {_bg};
     color: {_text};
-    font-family: 'Inter', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
 }}
+
+/* ── Sidebar ── */
 section[data-testid="stSidebar"] {{
-    background: {_surface};
+    background: {_sb_bg};
     border-right: 1px solid {_border};
 }}
 section[data-testid="stSidebar"] * {{ color: {_text} !important; }}
 
-/* ── Header ── */
-.app-header {{
-    background: {_header_grad};
-    border-bottom: 2px solid {_accent};
-    padding: 16px 32px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 28px;
-    border-radius: 0 0 14px 14px;
-    box-shadow: {_shadow};
+/* ── Sidebar logo zone ── */
+.sb-logo-zone {{
+    padding: 18px 20px 14px 20px;
+    border-bottom: 1px solid {_border};
+    margin-bottom: 0;
 }}
-.app-header img {{ height: 52px; object-fit: contain; }}
-.app-header-title {{
-    font-size: 1.45rem;
+.sb-logo-name {{
+    font-size: 1.05rem;
     font-weight: 800;
-    color: #ffffff;
-    letter-spacing: 0.01em;
-    flex: 1;
+    color: {_primary};
+    letter-spacing: -0.01em;
 }}
-.app-header-subtitle {{
-    font-size: 0.78rem;
-    font-weight: 400;
-    color: rgba(255,255,255,0.6);
-    letter-spacing: 0.04em;
+.sb-logo-dot {{
+    color: {_primary};
+    font-weight: 900;
+}}
+.sb-logo-sub {{
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: {_text_light};
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     margin-top: 2px;
 }}
-.theme-badge {{
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.2);
+.sb-section-label {{
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: {_text_light};
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 16px 20px 6px 20px;
+}}
+.sb-divider {{
+    height: 1px;
+    background: {_border};
+    margin: 14px 20px;
+}}
+
+/* ── Upload zones ── */
+.upload-primary {{
+    border: 1.5px dashed {_primary};
+    background: {_primary_lt};
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 4px 0 10px 0;
+    font-size: 12px;
+    color: {_primary};
+    font-weight: 600;
+}}
+.upload-secondary {{
+    border: 1.5px dashed {_border2};
+    background: {_bg};
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 4px 0 10px 0;
+    font-size: 12px;
+    color: {_text_muted};
+    font-weight: 500;
+}}
+.upload-hint {{
+    font-size: 10px;
+    font-weight: 400;
+    color: {_text_light};
+    margin-top: 1px;
+}}
+
+/* ── Navbar / top bar ── */
+.app-navbar {{
+    background: {_nav_bg};
+    border-bottom: 1px solid {_border};
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 0;
+}}
+.app-navbar-title {{
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: {_text};
+    flex: 1;
+}}
+.app-navbar-sub {{
+    font-size: 0.72rem;
+    color: {_text_muted};
+    margin-top: 1px;
+}}
+.theme-pill {{
+    background: {_surface2};
+    border: 1px solid {_border};
     border-radius: 20px;
-    padding: 5px 14px;
-    font-size: 0.78rem;
-    color: rgba(255,255,255,0.85);
-    cursor: pointer;
-    backdrop-filter: blur(8px);
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    color: {_text_mid};
+    font-weight: 500;
     white-space: nowrap;
+    cursor: pointer;
 }}
 
 /* ── Buttons ── */
 .stButton>button {{
-    background: linear-gradient(135deg, {_accent} 0%, {_accent2} 100%);
+    background: {_primary};
     color: #ffffff;
-    font-weight: 700;
-    font-size: 0.88rem;
+    font-weight: 600;
+    font-size: 0.85rem;
     border: none;
     border-radius: 8px;
-    padding: 9px 22px;
-    transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(224,123,0,0.3);
+    padding: 8px 18px;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(37,99,235,0.2), 0 4px 12px rgba(37,99,235,0.15);
     letter-spacing: 0.01em;
+    font-family: 'Inter', sans-serif;
 }}
 .stButton>button:hover {{
-    background: linear-gradient(135deg, {_accent2} 0%, #b85c00 100%);
-    box-shadow: 0 4px 16px rgba(224,123,0,0.4);
+    background: {_primary_dk};
+    box-shadow: 0 2px 4px rgba(37,99,235,0.3), 0 6px 20px rgba(37,99,235,0.2);
     transform: translateY(-1px);
 }}
+.stButton>button:active {{
+    transform: translateY(0);
+}}
 .stDownloadButton>button {{
-    background: linear-gradient(135deg, {_success} 0%, #15803d 100%);
+    background: {_success};
     color: white;
-    font-weight: 700;
+    font-weight: 600;
     border: none;
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(34,197,94,0.25);
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 1px 2px rgba(22,163,74,0.2), 0 4px 12px rgba(22,163,74,0.12);
 }}
 .stDownloadButton>button:hover {{
-    box-shadow: 0 4px 16px rgba(34,197,94,0.4);
+    background: #15803d;
+    box-shadow: 0 2px 4px rgba(22,163,74,0.3), 0 6px 20px rgba(22,163,74,0.18);
     transform: translateY(-1px);
 }}
 
 /* ── Headings ── */
-h1, h2, h3 {{ color: {_accent}; font-weight: 700; }}
+h1, h2, h3 {{ color: {_text}; font-weight: 700; }}
 
-/* ── Cards / Sections ── */
+/* ── Content cards ── */
 .qa-card {{
     background: {_card_bg};
     border: 1px solid {_border};
     border-radius: 12px;
-    padding: 20px 24px;
-    margin: 12px 0;
+    padding: 18px 22px;
+    margin: 10px 0;
     box-shadow: {_shadow_sm};
 }}
-.section-label {{
-    font-size: 0.72rem;
+
+/* ── Section row headers ── */
+.section-row {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 28px 0 8px 0;
+}}
+.section-bar {{
+    width: 3px;
+    height: 22px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}}
+.section-title {{
+    font-size: 0.95rem;
     font-weight: 700;
-    color: {_accent};
+    color: {_text};
+}}
+.section-sub {{
+    font-size: 0.72rem;
+    color: {_text_muted};
+    margin-top: 1px;
+}}
+.section-label {{
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: {_text_light};
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    margin-bottom: 6px;
-}}
-.pill {{
-    display: inline-block;
-    background: {_pill_bg};
-    border: 1px solid {_border};
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 0.75rem;
-    color: {_text_muted};
-    margin: 2px;
+    margin-bottom: 4px;
 }}
 
 /* ── Text areas ── */
 .stTextArea textarea {{
-    background: {_surface};
+    background: {_code_bg};
     border: 1px solid {_border};
     border-radius: 8px;
     color: {_text};
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
 }}
 .stTextInput input {{
     background: {_surface};
     border: 1px solid {_border};
     border-radius: 8px;
     color: {_text};
+    font-family: 'Inter', sans-serif;
 }}
 
 /* ── Dividers ── */
-hr {{ border-color: {_border}; opacity: 0.5; }}
+hr {{ border: none; border-top: 1px solid {_border}; opacity: 0.8; margin: 24px 0; }}
 
 /* ── Expanders ── */
 .streamlit-expanderHeader {{
@@ -211,215 +311,257 @@ hr {{ border-color: {_border}; opacity: 0.5; }}
     border-radius: 8px;
     font-weight: 600;
     color: {_text} !important;
-}}
-
-/* ── Sidebar upload zones ── */
-.upload-zone {{
-    border: 2px dashed {_border2};
-    border-radius: 10px;
-    padding: 14px 16px;
-    text-align: center;
-    background: {_surface2};
-    margin: 6px 0 16px 0;
-    transition: border-color 0.2s;
-}}
-.upload-icon {{ font-size: 1.6rem; margin-bottom: 4px; }}
-.upload-label {{ font-size: 0.78rem; color: {_text_muted}; }}
-
-/* ── Chat bubbles ── */
-.chat-user {{
-    background: {_surface2};
-    border-left: 3px solid {_accent};
-    border-radius: 0 10px 10px 0;
-    padding: 10px 16px;
-    margin: 8px 0 4px 0;
-    font-size: 14px;
-    color: {_text};
-}}
-.chat-assistant {{
-    background: {_card_bg};
     border: 1px solid {_border};
-    border-radius: 10px;
-    padding: 10px 16px;
-    margin: 4px 0 8px 0;
-    font-size: 14px;
-    color: {_text};
-}}
-.chat-name {{
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 4px;
 }}
 
 /* ── Alert boxes ── */
 .stAlert {{ border-radius: 8px !important; }}
 
-/* ── Agent pipeline cards ── */
-.pipeline-wrap {{
-    background: {_surface};
+/* ── Chat bubbles ── */
+.chat-user {{
+    background: {_primary_lt};
+    border-left: 3px solid {_primary};
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 8px 0 4px 0;
+    font-size: 13.5px;
+    color: {_text};
+    line-height: 1.5;
+}}
+.chat-assistant {{
+    background: {_card_bg};
     border: 1px solid {_border};
-    border-radius: 14px;
-    padding: 24px 28px;
-    margin: 12px 0 20px 0;
+    border-left: 3px solid {_violet};
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    margin: 4px 0 8px 0;
+    font-size: 13.5px;
+    color: {_text};
+    line-height: 1.5;
+}}
+.chat-name {{
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+}}
+.chat-prompt-chips {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}}
+.chat-chip {{
+    background: {_primary_lt};
+    border: 1px solid rgba(37,99,235,0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    color: {_primary};
+    font-weight: 500;
+    cursor: pointer;
+}}
+
+/* ── Pipeline cards ── */
+.pipeline-wrap {{
+    background: {_card_bg};
+    border: 1px solid {_border};
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 8px 0 16px 0;
     box-shadow: {_shadow};
 }}
 .pipeline-title {{
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: {_text};
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     display: flex;
     align-items: center;
     gap: 8px;
 }}
 .cards-grid {{
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
 }}
 .agent-card {{
     border-radius: 10px;
-    padding: 14px 12px;
+    padding: 12px 8px;
     text-align: center;
     border: 1px solid {_border};
     background: {_surface2};
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
     position: relative;
     overflow: hidden;
 }}
 .agent-card.done {{
     border-color: {_success};
-    background: {'rgba(34,197,94,0.08)' if _DM else 'rgba(22,163,74,0.06)'};
+    background: {_success_lt};
 }}
 .agent-card.active {{
-    border-color: {_accent};
-    background: {'rgba(245,166,35,0.1)' if _DM else 'rgba(224,123,0,0.07)'};
-    box-shadow: 0 0 0 2px {'rgba(245,166,35,0.2)' if _DM else 'rgba(224,123,0,0.15)'};
-    animation: cardPulse 1.8s ease-in-out infinite;
+    border-color: {_primary};
+    background: {_primary_lt};
+    box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+    animation: cardPulse 2s ease-in-out infinite;
 }}
 .agent-card.pending {{
-    opacity: 0.45;
+    opacity: 0.42;
 }}
 @keyframes cardPulse {{
-    0%   {{ box-shadow: 0 0 0 2px {'rgba(245,166,35,0.2)' if _DM else 'rgba(224,123,0,0.15)'}; }}
-    50%  {{ box-shadow: 0 0 0 6px {'rgba(245,166,35,0.0)' if _DM else 'rgba(224,123,0,0.0)'}; }}
-    100% {{ box-shadow: 0 0 0 2px {'rgba(245,166,35,0.2)' if _DM else 'rgba(224,123,0,0.15)'}; }}
+    0%   {{ box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }}
+    50%  {{ box-shadow: 0 0 0 6px rgba(37,99,235,0.0); }}
+    100% {{ box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }}
 }}
-.card-icon {{ font-size: 1.6rem; line-height: 1; margin-bottom: 6px; }}
+.card-icon {{ font-size: 1.4rem; line-height: 1; margin-bottom: 5px; }}
 .card-label {{
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 600;
     color: {_text};
     line-height: 1.3;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
 }}
+.agent-card.done .card-label  {{ color: {_success}; }}
+.agent-card.active .card-label {{ color: {_primary}; }}
 .card-status-dot {{
-    width: 7px; height: 7px;
+    width: 6px; height: 6px;
     border-radius: 50%;
     margin: 0 auto;
     background: {_border2};
 }}
 .agent-card.done .card-status-dot {{ background: {_success}; }}
 .agent-card.active .card-status-dot {{
-    background: {_accent};
+    background: {_primary};
     animation: dotBlink 1s ease-in-out infinite;
 }}
 @keyframes dotBlink {{
     0%, 100% {{ opacity: 1; transform: scale(1); }}
-    50%       {{ opacity: 0.4; transform: scale(0.8); }}
+    50%       {{ opacity: 0.3; transform: scale(0.75); }}
 }}
 .card-check {{
     position: absolute;
-    top: 6px; right: 8px;
-    font-size: 0.75rem;
+    top: 5px; right: 7px;
+    font-size: 0.65rem;
     color: {_success};
     font-weight: 700;
 }}
 .pipeline-progress {{
-    margin-top: 18px;
-    height: 4px;
+    margin-top: 14px;
+    height: 3px;
     background: {_border};
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
 }}
 .pipeline-progress-bar {{
     height: 100%;
-    background: linear-gradient(90deg, {_accent} 0%, {_success} 100%);
-    border-radius: 4px;
-    transition: width 0.5s ease;
+    background: linear-gradient(90deg, {_primary} 0%, {_success} 100%);
+    border-radius: 3px;
+    transition: width 0.6s ease;
 }}
 .pipeline-step-label {{
-    margin-top: 10px;
-    font-size: 0.78rem;
+    margin-top: 8px;
+    font-size: 0.72rem;
     color: {_text_muted};
-    font-style: italic;
+}}
+
+/* ── Export cards ── */
+.export-card {{
+    background: {_card_bg};
+    border: 1px solid {_border};
+    border-radius: 12px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: {_shadow_sm};
+}}
+.export-card-stripe {{
+    height: 4px;
+    width: 100%;
+}}
+.export-card-body {{
+    padding: 14px 18px 16px 18px;
+}}
+.export-card-title {{
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: {_text};
+    margin-bottom: 4px;
+}}
+.export-card-desc {{
+    font-size: 0.72rem;
+    color: {_text_muted};
+    line-height: 1.5;
+    margin-bottom: 12px;
 }}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------- HEADER ----------------
 _LOGO_B64 = "data:image/png;base64,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"
-_theme_icon = "☀️ Light Mode" if _DM else "🌙 Dark Mode"
-_header_col1, _header_col2 = st.columns([8, 1])
-with _header_col1:
+# ── NAVBAR (top bar with title + dark mode toggle) ──────────────
+_theme_icon = "☀️  Light" if _DM else "🌙  Dark"
+_nav_col1, _nav_col2 = st.columns([9, 1])
+with _nav_col1:
     st.markdown(f"""
-<div class="app-header">
-    <img src="{_LOGO_B64}" alt="examqa.com logo" style="height:52px;object-fit:contain;" />
-    <div>
-        <div class="app-header-title">GCSE Worksheet QA Studio</div>
-        <div class="app-header-subtitle">AI-powered exam paper enhancement</div>
+<div class="app-navbar">
+    <img src="{_LOGO_B64}" alt="examqa.com" style="height:36px;object-fit:contain;opacity:0.9;" />
+    <div style="flex:1;">
+        <div class="app-navbar-title">GCSE Worksheet QA Studio</div>
+        <div class="app-navbar-sub">AI-powered exam paper enhancement</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
-with _header_col2:
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+with _nav_col2:
+    st.markdown(f"<div style='height:14px'></div>", unsafe_allow_html=True)
     if st.button(_theme_icon, key="theme_toggle"):
         st.session_state["dark_mode"] = not st.session_state["dark_mode"]
         st.rerun()
 
-# ---------------- SIDEBAR ----------------
+# ── SIDEBAR ─────────────────────────────────────────────────────
 with st.sidebar:
+    # Logo zone
     st.markdown(f"""
-<div style="padding:8px 0 16px 0;">
-  <div style="font-size:1.05rem;font-weight:800;color:{_accent};letter-spacing:0.01em;">
-    📁 Document Upload
-  </div>
-  <div style="font-size:0.75rem;color:{_text_muted};margin-top:2px;">
-    Upload your files to begin
-  </div>
+<div class="sb-logo-zone">
+    <div class="sb-logo-name">examqa<span class="sb-logo-dot">.</span></div>
+    <div class="sb-logo-sub">Worksheet QA Studio</div>
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown(f'<div class="section-label">Worksheet</div>', unsafe_allow_html=True)
-    worksheet_file = st.file_uploader("Worksheet (.docx)", type=["docx"], label_visibility="collapsed")
-
-    st.markdown(f'<div class="section-label" style="margin-top:10px">Mark Scheme</div>', unsafe_allow_html=True)
-    markscheme_file = st.file_uploader("Mark Scheme (.docx)", type=["docx"], label_visibility="collapsed")
+    # Documents section
+    st.markdown('<div class="sb-section-label">Documents</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+<div class="upload-primary">
+    📄  Worksheet (.docx)<br>
+    <span class="upload-hint">Drop file or click to upload</span>
+</div>""", unsafe_allow_html=True)
+    worksheet_file = st.file_uploader("Worksheet", type=["docx"], label_visibility="collapsed")
 
     st.markdown(f"""
-<div style="border-top:1px solid {_border};margin:18px 0 14px 0;"></div>
-<div style="font-size:1.0rem;font-weight:700;color:{_accent};margin-bottom:4px;">
-  📋 Specification
-</div>
-<div style="font-size:0.72rem;color:{_text_muted};margin-bottom:10px;">
-  Optional — helps with topic coverage checks
-</div>
-""", unsafe_allow_html=True)
+<div class="upload-secondary">
+    📋  Mark Scheme (.docx)<br>
+    <span class="upload-hint">Drop file or click to upload</span>
+</div>""", unsafe_allow_html=True)
+    markscheme_file = st.file_uploader("Mark Scheme", type=["docx"], label_visibility="collapsed")
 
-    st.markdown(f'<div class="section-label">Text file (.txt)</div>', unsafe_allow_html=True)
-    spec_txt = st.file_uploader("Spec txt", type=["txt"], label_visibility="collapsed")
+    # Spec section
+    st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sb-section-label">Specification (optional)</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+<div class="upload-secondary">
+    📑  .txt or .docx file<br>
+    <span class="upload-hint">Aids topic coverage checks</span>
+</div>""", unsafe_allow_html=True)
+    spec_txt  = st.file_uploader("Spec .txt",  type=["txt"],  label_visibility="collapsed")
+    spec_docx = st.file_uploader("Spec .docx", type=["docx"], label_visibility="collapsed")
 
-    st.markdown(f'<div class="section-label" style="margin-top:8px">Word doc (.docx)</div>', unsafe_allow_html=True)
-    spec_docx = st.file_uploader("Spec docx", type=["docx"], label_visibility="collapsed")
+    st.markdown(f'<div style="font-size:0.7rem;color:{_text_light};margin:4px 0 2px 0;">Or paste below</div>', unsafe_allow_html=True)
+    pasted_spec = st.text_area("Paste spec", label_visibility="collapsed",
+                               placeholder="Paste specification text here…", height=90)
 
-    st.markdown(f'<div class="section-label" style="margin-top:8px">Or paste below</div>', unsafe_allow_html=True)
-    pasted_spec = st.text_area("Paste specification", label_visibility="collapsed",
-                               placeholder="Paste specification text here...", height=100)
-
-    st.markdown(f'<div style="border-top:1px solid {_border};margin:18px 0 14px 0;"></div>', unsafe_allow_html=True)
+    # Run button
+    st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
     run_button = st.button("▶  Run Enhancement Pipeline", use_container_width=True)
+    st.markdown(f'<div style="font-size:0.68rem;color:{_text_light};text-align:center;margin-top:6px;">8-step AI pipeline · ~30 seconds</div>', unsafe_allow_html=True)
 
 # ---------------- HELPERS ----------------
 
@@ -1417,11 +1559,11 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
         st.session_state["ms_editor"] = st.session_state.pop("_ms_pending")
 
     st.markdown(f"""
-<div style="display:flex;align-items:center;gap:10px;margin:28px 0 6px 0;">
-  <div style="width:4px;height:28px;background:{_accent};border-radius:3px;"></div>
+<div class="section-row">
+  <div class="section-bar" style="background:{_primary};"></div>
   <div>
-    <div style="font-size:1.1rem;font-weight:800;color:{_text};">Enhanced Worksheet</div>
-    <div style="font-size:0.73rem;color:{_text_muted};">Edit directly below — click Save Edits to apply changes</div>
+    <div class="section-title">Enhanced Worksheet</div>
+    <div class="section-sub">Edit directly below — click Save Edits to apply changes</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1434,11 +1576,11 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
         st.success("✅ Worksheet edits saved.")
 
     st.markdown(f"""
-<div style="display:flex;align-items:center;gap:10px;margin:28px 0 6px 0;">
-  <div style="width:4px;height:28px;background:#60a5fa;border-radius:3px;"></div>
+<div class="section-row">
+  <div class="section-bar" style="background:{_violet};"></div>
   <div>
-    <div style="font-size:1.1rem;font-weight:800;color:{_text};">Enhanced Mark Scheme</div>
-    <div style="font-size:0.73rem;color:{_text_muted};">Edit directly below — click Save Edits to apply changes</div>
+    <div class="section-title">Enhanced Mark Scheme</div>
+    <div class="section-sub">Edit directly below — click Save Edits to apply changes</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1513,9 +1655,12 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
     # EXPORT
     # ================================================================
     st.markdown(f"""
-<div style="display:flex;align-items:center;gap:10px;margin:0 0 18px 0;">
-  <div style="width:4px;height:28px;background:{_success};border-radius:3px;"></div>
-  <div style="font-size:1.1rem;font-weight:800;color:{_text};">Export Documents</div>
+<div class="section-row">
+  <div class="section-bar" style="background:{_success};"></div>
+  <div>
+    <div class="section-title">Export Documents</div>
+    <div class="section-sub">Generate formatted .docx files ready to share with students</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1557,12 +1702,11 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
 
         with _exp_col1:
             st.markdown(f"""
-<div class="qa-card" style="margin-bottom:10px;">
-  <div style="font-size:0.8rem;font-weight:700;color:{_text_muted};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;">
-    📄 Formatted Worksheet
-  </div>
-  <div style="font-size:0.78rem;color:{_text_muted};margin-bottom:10px;">
-    AI formats your worksheet into AQA exam-paper style with answer lines, marks, and question structure.
+<div class="export-card">
+  <div class="export-card-stripe" style="background:{_primary};"></div>
+  <div class="export-card-body">
+    <div class="export-card-title">📄  Formatted Worksheet</div>
+    <div class="export-card-desc">Exam-paper style layout with answer lines, marks placement and question numbering.</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1588,12 +1732,11 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
 
         with _exp_col2:
             st.markdown(f"""
-<div class="qa-card" style="margin-bottom:10px;">
-  <div style="font-size:0.8rem;font-weight:700;color:{_text_muted};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;">
-    📋 Mark Scheme
-  </div>
-  <div style="font-size:0.78rem;color:{_text_muted};margin-bottom:10px;">
-    Exports your mark scheme as a clean Word document with proper formatting, bolded question numbers, and structured marking points.
+<div class="export-card">
+  <div class="export-card-stripe" style="background:{_success};"></div>
+  <div class="export-card-body">
+    <div class="export-card-title">📋  Mark Scheme</div>
+    <div class="export-card-desc">Clean Word document with bold question numbers and structured marking points.</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1624,19 +1767,19 @@ if "worksheet_text" in st.session_state and st.session_state["worksheet_text"]:
 # AI CHAT ASSISTANT
 # ================================================================
 
-st.markdown(f'<div style="border-top:1px solid {_border};margin:32px 0 0 0;"></div>', unsafe_allow_html=True)
+st.markdown(f'<hr>', unsafe_allow_html=True)
 st.markdown(f"""
-<div style="display:flex;align-items:center;gap:10px;margin:24px 0 6px 0;">
-  <div style="width:4px;height:28px;background:#a855f7;border-radius:3px;"></div>
+<div class="section-row" style="margin-top:8px;">
+  <div class="section-bar" style="background:{_violet};"></div>
   <div>
-    <div style="font-size:1.1rem;font-weight:800;color:{_text};">💬 AI Assistant</div>
-    <div style="font-size:0.73rem;color:{_text_muted};">Ask the AI to make targeted edits — it applies changes automatically</div>
+    <div class="section-title">💬 AI Assistant</div>
+    <div class="section-sub">Make targeted edits — changes apply automatically to your documents</div>
   </div>
 </div>
-<div style="background:{_surface2};border:1px solid {_border};border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:0.8rem;color:{_text_muted};">
-  Try: <span style="color:{_accent};font-weight:600">"Change Olivia to Mustafa throughout"</span> ·
-  <span style="color:{_accent};font-weight:600">"Make Q3b an explain question worth 4 marks"</span> ·
-  <span style="color:{_accent};font-weight:600">"Fix the calculation in question 2"</span>
+<div class="chat-prompt-chips">
+  <span class="chat-chip">"Change Olivia to Mustafa throughout"</span>
+  <span class="chat-chip">"Make Q3b an explain question, 4 marks"</span>
+  <span class="chat-chip">"Fix the calculation in question 2"</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1699,14 +1842,14 @@ with _chat_container:
         if msg["role"] == "user":
             st.markdown(
                 f'<div class="chat-user">'
-                f'<div class="chat-name" style="color:{_accent};">🧑 You</div>'
+                f'<div class="chat-name" style="color:{_primary};">You</div>'
                 f'{display_text}</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
                 f'<div class="chat-assistant">'
-                f'<div class="chat-name" style="color:#a855f7;">🤖 Assistant</div>'
+                f'<div class="chat-name" style="color:{_violet};">AI Assistant</div>'
                 f'{display_text}</div>',
                 unsafe_allow_html=True,
             )
