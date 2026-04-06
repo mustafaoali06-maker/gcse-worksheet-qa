@@ -630,7 +630,7 @@ def build_formatted_docx(spec):
     # Answer line: underscore string filling ~17cm content width.
     # Lines start at LABEL_CM (not TEXT_CM) so they begin under the label letter/roman.
     # Counts adjusted for the wider start position (LABEL_CM is further left than TEXT_CM).
-    ANSWER_UNDERSCORES = {0: 85, 1: 82, 2: 78}
+    ANSWER_UNDERSCORES = {0: 80, 1: 77, 2: 73}
 
     # Auto-split context sentence from command word inside question_text
     _CMD_SPLIT_D = re.compile(
