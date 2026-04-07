@@ -440,11 +440,8 @@ function App() {
   const [previewWs, setPreviewWs]     = useState(true);
   const [previewMs, setPreviewMs]     = useState(true);
 
-  // Worksheet naming
-  const [wsTitle, setWsTitle]         = useState('');
-  const [studentName, setStudentName] = useState('');
-  const [className, setClassName]     = useState('');
-  const [wsDate, setWsDate]           = useState('');
+  // Worksheet naming (auto-populated from filename)
+  const [wsTitle, setWsTitle] = useState('');
 
   // Export
   const [wsDocBytes, setWsDocBytes]   = useState(null);
@@ -463,6 +460,15 @@ function App() {
   const [error, setError] = useState('');
 
   const fileRef = (setter) => (e) => setter(e.target.files[0] || null);
+  const wsFileRef = (e) => {
+    const f = e.target.files[0] || null;
+    setWsFile(f);
+    if (f) setWsTitle(f.name.replace(/\.docx$/i, '').replace(/[_-]+/g, ' ').trim());
+  };
+  const msFileRef = (e) => {
+    const f = e.target.files[0] || null;
+    setMsFile(f);
+  };
   const wsInputRef   = useRef();
   const msInputRef   = useRef();
   const specTxtRef   = useRef();
@@ -512,8 +518,9 @@ function App() {
               setHasResults(true);
               setCurrentStep(STEPS.length);
               setStepDetail('');
-              if (wsFile) setWsFilename(wsFile.name.replace(/\.docx$/i, '_enhanced.docx'));
-              if (wsFile) setMsFilename(wsFile.name.replace(/QP/i, 'MS').replace(/\.docx$/i, '.docx'));
+              const base = wsTitle || (wsFile ? wsFile.name.replace(/\.docx$/i, '') : 'worksheet');
+              setWsFilename(base + '_enhanced.docx');
+              setMsFilename(base.replace(/QP/i, 'MS') + '_MS.docx');
             } else {
               setCurrentStep(data.step || 0);
               setStepDetail(data.detail || '');
@@ -625,13 +632,13 @@ function App() {
           <div onClick={() => !wsFile && wsInputRef.current.click()} style={{ cursor: wsFile ? 'default' : 'pointer' }}>
             <UploadZone icon="doc" label="Worksheet" hint=".docx · click to upload" required file={wsFile} onClear={() => setWsFile(null)} />
           </div>
-          <input ref={wsInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setWsFile)} />
+          <input ref={wsInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={wsFileRef} />
 
           {/* Mark scheme upload */}
           <div onClick={() => !msFile && msInputRef.current.click()} style={{ cursor: msFile ? 'default' : 'pointer' }}>
             <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx · click to upload" required={false} file={msFile} onClear={() => setMsFile(null)} />
           </div>
-          <input ref={msInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setMsFile)} />
+          <input ref={msInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={msFileRef} />
 
           <Divider />
 
@@ -752,25 +759,15 @@ function App() {
 
           {/* Worksheet naming header (shown when results are ready) */}
           {hasResults && (
-            <div style={{ padding: '14px 24px', borderBottom: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }} className="fade-in">
+            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', gap: 10 }} className="fade-in">
+              <Icon name="filetext" size={16} color={C.textMute} />
               <input
                 value={wsTitle}
                 onChange={e => setWsTitle(e.target.value)}
                 placeholder="Worksheet title…"
-                style={{ background: 'none', border: 'none', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: '1rem', fontWeight: 700, outline: 'none', minWidth: 200, padding: '2px 4px', flex: 2 }}
+                style={{ background: 'none', border: 'none', color: C.text, fontSize: '0.95rem', fontWeight: 700, outline: 'none', flex: 1, padding: '2px 0' }}
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 130 }}>
-                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600, whiteSpace: 'nowrap' }}>Student:</span>
-                <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Name" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 100 }}>
-                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600 }}>Class:</span>
-                <input value={className} onChange={e => setClassName(e.target.value)} placeholder="e.g. 11B" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 100 }}>
-                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600 }}>Date:</span>
-                <input value={wsDate} onChange={e => setWsDate(e.target.value)} placeholder="DD/MM/YYYY" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
-              </div>
+              <span style={{ fontSize: '0.7rem', color: C.textMute, whiteSpace: 'nowrap' }}>Used as download filename</span>
             </div>
           )}
 

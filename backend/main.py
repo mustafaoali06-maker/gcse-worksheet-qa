@@ -45,8 +45,8 @@ from agents import (
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-ANSWER_LINE = "___________________________________________________________________________________"
-ANSWER_UNDERSCORES = {0: 83, 1: 80, 2: 76}
+ANSWER_LINE = "_____________________________________________________________________________"
+ANSWER_UNDERSCORES = {0: 79, 1: 76, 2: 72}
 LABEL_CM = [0.0, 0.63, 1.27]
 TEXT_CM = [0.7, 1.27, 1.90]
 
