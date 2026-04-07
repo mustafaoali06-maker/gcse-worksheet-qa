@@ -477,6 +477,24 @@ function App() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
 
+  // ── Reset all state for a fresh worksheet ────────────────────────────────
+  const resetAll = () => {
+    setWsFile(null); setMsFile(null); setSpecTxt(null); setSpecDocx(null); setPastedSpec('');
+    setRunning(false); setCurrentStep(-1); setStepDetail('');
+    setWorksheet(''); setMarkscheme(''); setHasResults(false);
+    setActiveTab('worksheet'); setPreviewWs(true); setPreviewMs(true);
+    setWsTitle('');
+    setWsDocBytes(null); setMsDocBytes(null); setGenWs(false); setGenMs(false);
+    setWsFilename('worksheet.docx'); setMsFilename('markscheme.docx');
+    setChatMsgs([]); setChatInput(''); setChatLoading(false);
+    setError('');
+    // Also reset the file inputs so the same file can be re-uploaded
+    if (wsInputRef.current)  wsInputRef.current.value  = '';
+    if (msInputRef.current)  msInputRef.current.value  = '';
+    if (specTxtRef.current)  specTxtRef.current.value  = '';
+    if (specDocxRef.current) specDocxRef.current.value = '';
+  };
+
   // ── Run pipeline ─────────────────────────────────────────────────────────
   const runPipeline = async () => {
     if (!wsFile) { setError('Please upload a Worksheet .docx file first.'); return; }
@@ -708,6 +726,21 @@ function App() {
             <div style={{ fontSize: '0.68rem', color: C.textMute, lineHeight: 1 }}>AI-powered exam paper enhancement</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(hasResults || running || wsFile) && (
+              <button
+                onClick={resetAll}
+                style={{
+                  background: 'none', color: C.textMid, border: `1px solid ${C.border}`,
+                  borderRadius: 8, padding: '7px 14px', fontSize: '0.77rem', fontWeight: 600,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.target.style.borderColor = C.blue; e.target.style.color = C.blue; }}
+                onMouseLeave={e => { e.target.style.borderColor = C.border; e.target.style.color = C.textMid; }}
+              >
+                <Icon name="filetext" size={13} color="currentColor" /> New Worksheet
+              </button>
+            )}
             {hasResults && (
               <button
                 onClick={() => { generateWs(); generateMs(); }}
