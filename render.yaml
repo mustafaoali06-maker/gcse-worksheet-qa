@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: examqa
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AUTH_USER
+        value: examqa
+      - key: AUTH_PASSWORD
+        sync: false
