@@ -201,12 +201,12 @@ function Pipeline({ currentStep, stepDetail }) {
       <div style={{ fontSize: '0.72rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
         Processing Pipeline
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 8, maxWidth: 900 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 10 }}>
         {STEPS.map((s, i) => {
           const state = i < currentStep ? 'done' : i === currentStep && !done ? 'active' : 'pending';
           return (
             <div key={i} style={{
-              borderRadius: 12, padding: '10px 6px 8px', textAlign: 'center',
+              borderRadius: 12, padding: '14px 8px 12px', textAlign: 'center',
               border: `${state === 'active' ? 2 : 1}px solid ${state === 'done' ? C.greenBrd : state === 'active' ? C.blue : C.border}`,
               background: state === 'done' ? C.greenLt : state === 'active' ? C.blueLt : C.surface,
               opacity: state === 'pending' ? 0.55 : 1, position: 'relative',
@@ -218,21 +218,21 @@ function Pipeline({ currentStep, stepDetail }) {
                 </div>
               )}
               <div style={{
-                width: 32, height: 32, borderRadius: 8, margin: '0 auto 5px',
+                width: 40, height: 40, borderRadius: 10, margin: '0 auto 7px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: state === 'done' ? 'rgba(34,197,94,0.2)' : state === 'active' ? 'rgba(59,130,246,0.2)' : C.surface2,
               }}>
-                <Icon name={state === 'done' ? 'check' : s.icon} size={17}
+                <Icon name={state === 'done' ? 'check' : s.icon} size={20}
                   color={state === 'done' ? C.green : state === 'active' ? C.blue : C.textMid}
                   strokeWidth={state === 'done' ? 2.5 : 1.8}
                 />
               </div>
-              <div style={{ fontSize: '0.6rem', fontWeight: 600, color: state === 'done' ? '#16a34a' : state === 'active' ? C.blue : C.textMute, lineHeight: 1.3 }}>{s.label}</div>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: state === 'done' ? '#16a34a' : state === 'active' ? C.blue : C.textMute, lineHeight: 1.3 }}>{s.label}</div>
             </div>
           );
         })}
       </div>
-      <div style={{ marginTop: 14, height: 5, background: C.border, borderRadius: 9999, maxWidth: 900, overflow: 'hidden' }}>
+      <div style={{ marginTop: 14, height: 5, background: C.border, borderRadius: 9999, overflow: 'hidden' }}>
         <div className="pipeline-bar" style={{ height: '100%', borderRadius: 9999, background: 'linear-gradient(to right,#3b82f6,#8b5cf6)', width: `${done ? 100 : pct}%` }} />
       </div>
       <div style={{ marginTop: 5, fontSize: '0.68rem', color: done ? C.green : C.textMute, display:'flex', alignItems:'center', gap:5 }}>
@@ -611,7 +611,7 @@ function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Logo size={38} />
             <div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>examqa.</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>examqa.com</div>
               <div style={{ fontSize: '0.62rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Worksheet Studio</div>
             </div>
           </div>
@@ -629,7 +629,7 @@ function App() {
 
           {/* Mark scheme upload */}
           <div onClick={() => !msFile && msInputRef.current.click()} style={{ cursor: msFile ? 'default' : 'pointer' }}>
-            <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx · click to upload" required file={msFile} onClear={() => setMsFile(null)} />
+            <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx · click to upload" required={false} file={msFile} onClear={() => setMsFile(null)} />
           </div>
           <input ref={msInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setMsFile)} />
 
