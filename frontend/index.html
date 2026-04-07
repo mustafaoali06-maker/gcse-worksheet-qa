@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GCSE Worksheet QA Studio</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy:    { 950: '#0d1117', 900: '#131929', 800: '#161c2d', 700: '#1c2236', 600: '#212840' },
+          brand:   { blue: '#3b82f6', violet: '#8b5cf6', 'blue-dk': '#2563eb', 'violet-dk': '#7c3aed' },
+        },
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0d1117; color: #e2e8f0; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #161c2d; }
+  ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
+  textarea { resize: vertical; }
+  .grad-text { background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .pipeline-bar { transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+  @keyframes pulse-blue { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0.4)} 50%{box-shadow:0 0 0 8px rgba(59,130,246,0)} }
+  .card-active { animation: pulse-blue 2s ease-in-out infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { animation: spin 0.8s linear infinite; }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const API = '';  // same origin — FastAPI serves this file at /
+
+const STEPS = [
+  { icon: 'filetext',    label: 'Read Files',   detail: 'Parsing docs'        },
+  { icon: 'sparkles',    label: 'Enhance WS',   detail: 'Improving worksheet' },
+  { icon: 'clipboard',   label: 'Mark Scheme',  detail: 'Generating MS'       },
+  { icon: 'search',      label: 'Agent 1',      detail: 'Command words'       },
+  { icon: 'barchart',    label: 'Agent 2',      detail: 'Mark structure'      },
+  { icon: 'layers',      label: 'Agent 3',      detail: 'Cognitive balance'   },
+  { icon: 'bookopen',    label: 'Agent 4',      detail: 'Topic coverage'      },
+  { icon: 'checkcircle', label: 'Agent 5',      detail: 'Final revision'      },
+];
+
+// ── Colour tokens (Figma Make v3) ─────────────────────────────────────────
+const C = {
+  bg:       '#0d1117',
+  surface:  '#161c2d',
+  surface2: '#1c2236',
+  surface3: '#212840',
+  border:   'rgba(255,255,255,0.07)',
+  border2:  'rgba(255,255,255,0.12)',
+  text:     '#e2e8f0',
+  textMid:  '#94a3b8',
+  textMute: '#64748b',
+  blue:     '#3b82f6',
+  blueLt:   'rgba(59,130,246,0.15)',
+  violet:   '#8b5cf6',
+  green:    '#22c55e',
+  greenLt:  'rgba(34,197,94,0.15)',
+  greenBrd: 'rgba(34,197,94,0.30)',
+  red:      '#f87171',
+};
+
+// ── Small reusable components ─────────────────────────────────────────────
+
+function Logo({ size = 34 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 10, overflow: 'hidden',
+      flexShrink: 0, boxShadow: '0 2px 10px rgba(124,58,237,0.35)',
+      background: 'linear-gradient(135deg,#1c2236,#212840)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <img src="/logo.png" alt="examqa" style={{ width: '82%', height: '82%', objectFit: 'contain' }}
+        onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = 'linear-gradient(135deg,#3b82f6,#8b5cf6)'; e.target.parentNode.innerHTML = '<span style="color:#fff;font-size:' + (size*0.47) + 'px">✦</span>'; }}
+      />
+    </div>
+  );
+}
+
+function Badge({ children, color = C.blue, bg = C.blueLt }) {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, color, background: bg,
+      borderRadius: 4, padding: '1px 6px', letterSpacing: '0.03em',
+    }}>{children}</span>
+  );
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: C.border, margin: '10px 0' }} />;
+}
+
+function Spinner({ size = 16 }) {
+  return (
+    <div className="spinner" style={{
+      width: size, height: size, border: `2px solid ${C.border2}`,
+      borderTopColor: C.blue, borderRadius: '50%',
+    }} />
+  );
+}
+
+// ── SVG Icon system ───────────────────────────────────────────────────────
+function Icon({ name, size = 18, color = 'currentColor', strokeWidth = 2 }) {
+  const p = {
+    // Pipeline step icons
+    filetext:    <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></>,
+    sparkles:    <><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></>,
+    clipboard:   <><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></>,
+    search:      <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></>,
+    barchart:    <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>,
+    layers:      <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
+    bookopen:    <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
+    checkcircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+    // UI action icons
+    check:       <polyline points="20 6 9 17 4 12"/>,
+    upload:      <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></>,
+    doc:         <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
+    alignleft:   <><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></>,
+    save:        <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>,
+    zap:         <><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></>,
+    download:    <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+    send:        <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
+    x:           <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    export:      <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
+      style={{ display:'inline-block', flexShrink:0 }}>
+      {p[name] || null}
+    </svg>
+  );
+}
+
+// ── UploadZone ────────────────────────────────────────────────────────────
+function UploadZone({ icon, label, hint, required, file, onClear }) {
+  const hasFile = !!file;
+  return (
+    <div style={{
+      background: hasFile ? C.greenLt : (required ? 'rgba(59,130,246,0.06)' : C.surface2),
+      border: `1.5px solid ${hasFile ? C.greenBrd : (required ? 'rgba(59,130,246,0.3)' : C.border)}`,
+      borderRadius: 10, padding: '8px 10px', marginBottom: 6,
+      display: 'flex', alignItems: 'center', gap: 9, transition: 'all 0.2s',
+    }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: 7,
+        background: hasFile ? C.greenLt : (required ? 'rgba(59,130,246,0.2)' : C.surface3),
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>{hasFile
+        ? <Icon name="check" size={16} color={C.green} strokeWidth={2.5} />
+        : <Icon name={icon} size={16} color={required ? C.blue : C.textMid} />
+      }</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: hasFile ? C.green : C.text }}>{label}</span>
+          {hasFile
+            ? <span style={{ fontSize: 9, color: C.green, background: C.greenLt, border: `1px solid ${C.greenBrd}`, borderRadius: 20, padding: '1px 7px', marginLeft: 'auto' }}>Uploaded</span>
+            : <Badge color={required ? C.blue : C.textMute} bg={required ? C.blueLt : C.surface3}>{required ? 'Required' : 'Optional'}</Badge>
+          }
+          {hasFile && (
+            <button onClick={onClear} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.red, cursor: 'pointer', padding: '0 2px', display:'flex', alignItems:'center' }}><Icon name="x" size={13} color={C.red} strokeWidth={2.5} /></button>
+          )}
+        </div>
+        <div style={{ fontSize: 10, color: C.textMute }}>{hasFile ? file.name : hint}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Pipeline progress strip ───────────────────────────────────────────────
+function Pipeline({ currentStep, stepDetail }) {
+  const pct = Math.min(100, Math.round((currentStep / STEPS.length) * 100));
+  const done = currentStep >= STEPS.length;
+
+  return (
+    <div style={{
+      background: `linear-gradient(to right, ${C.surface}, ${C.surface2})`,
+      borderBottom: `1px solid ${C.border}`,
+      padding: '16px 24px 18px',
+    }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+        Processing Pipeline
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 8, maxWidth: 900 }}>
+        {STEPS.map((s, i) => {
+          const state = i < currentStep ? 'done' : i === currentStep && !done ? 'active' : 'pending';
+          return (
+            <div key={i} style={{
+              borderRadius: 12, padding: '10px 6px 8px', textAlign: 'center',
+              border: `${state === 'active' ? 2 : 1}px solid ${state === 'done' ? C.greenBrd : state === 'active' ? C.blue : C.border}`,
+              background: state === 'done' ? C.greenLt : state === 'active' ? C.blueLt : C.surface,
+              opacity: state === 'pending' ? 0.55 : 1, position: 'relative',
+              boxShadow: state === 'active' ? '0 0 0 2px rgba(59,130,246,0.25)' : 'none',
+            }} className={state === 'active' ? 'card-active' : ''}>
+              {state === 'done' && (
+                <div style={{ position:'absolute', top:3, right:5 }}>
+                  <Icon name="check" size={10} color={C.green} strokeWidth={3} />
+                </div>
+              )}
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, margin: '0 auto 5px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: state === 'done' ? 'rgba(34,197,94,0.2)' : state === 'active' ? 'rgba(59,130,246,0.2)' : C.surface2,
+              }}>
+                <Icon name={state === 'done' ? 'check' : s.icon} size={17}
+                  color={state === 'done' ? C.green : state === 'active' ? C.blue : C.textMid}
+                  strokeWidth={state === 'done' ? 2.5 : 1.8}
+                />
+              </div>
+              <div style={{ fontSize: '0.6rem', fontWeight: 600, color: state === 'done' ? '#16a34a' : state === 'active' ? C.blue : C.textMute, lineHeight: 1.3 }}>{s.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 14, height: 5, background: C.border, borderRadius: 9999, maxWidth: 900, overflow: 'hidden' }}>
+        <div className="pipeline-bar" style={{ height: '100%', borderRadius: 9999, background: 'linear-gradient(to right,#3b82f6,#8b5cf6)', width: `${done ? 100 : pct}%` }} />
+      </div>
+      <div style={{ marginTop: 5, fontSize: '0.68rem', color: done ? C.green : C.textMute, display:'flex', alignItems:'center', gap:5 }}>
+        {done && <Icon name="checkcircle" size={12} color={C.green} />}
+        {done ? 'All steps complete' : stepDetail || `Step ${currentStep + 1} of ${STEPS.length}`}
+      </div>
+    </div>
+  );
+}
+
+// ── Section header ────────────────────────────────────────────────────────
+function SectionHeader({ color, title, sub }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '28px 0 10px' }}>
+      <div style={{ width: 3, height: 22, borderRadius: 2, background: color, flexShrink: 0 }} />
+      <div>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{title}</div>
+        {sub && <div style={{ fontSize: '0.71rem', color: C.textMute, marginTop: 1 }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Textarea editor ───────────────────────────────────────────────────────
+function DocEditor({ value, onChange, label, color, onSave, saving }) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SectionHeader color={color} title={label} sub="Edit directly — click Save to apply changes" />
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: '100%', minHeight: 340, background: '#161c2d',
+          border: `1px solid ${C.border}`, borderRadius: 10,
+          color: C.text, fontFamily: "'Fira Code','Courier New',monospace",
+          fontSize: 12.5, lineHeight: 1.65, padding: '14px 16px',
+          outline: 'none',
+        }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, gap: 8 }}>
+        <button
+          onClick={onSave}
+          disabled={saving}
+          style={{
+            background: color, color: '#fff', border: 'none', borderRadius: 8,
+            padding: '7px 18px', fontSize: '0.82rem', fontWeight: 600,
+            cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          {saving ? <Spinner size={13} /> : <Icon name="save" size={14} color="#fff" />} Save Edits
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Export card ───────────────────────────────────────────────────────────
+function ExportCard({ stripeColor, title, desc, onGenerate, onDownload, generating, docBytes, filename }) {
+  return (
+    <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ height: 4, background: stripeColor }} />
+      <div style={{ padding: '14px 18px 16px' }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: C.text, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: '0.71rem', color: C.textMute, lineHeight: 1.5, marginBottom: 14 }}>{desc}</div>
+        {!docBytes ? (
+          <button
+            onClick={onGenerate}
+            disabled={generating}
+            style={{
+              width: '100%', background: stripeColor, color: '#fff', border: 'none',
+              borderRadius: 8, padding: '9px 0', fontSize: '0.82rem', fontWeight: 600,
+              cursor: generating ? 'not-allowed' : 'pointer', opacity: generating ? 0.7 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            }}
+          >
+            {generating ? <><Spinner size={14} /> Generating…</> : <><Icon name="zap" size={14} color="#fff" /> Generate</>}
+          </button>
+        ) : (
+          <button
+            onClick={onDownload}
+            style={{
+              width: '100%', background: C.green, color: '#fff', border: 'none',
+              borderRadius: 8, padding: '9px 0', fontSize: '0.82rem', fontWeight: 600,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            }}
+          >
+            <Icon name="download" size={14} color="#fff" /> Download {filename}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Chat bubble ───────────────────────────────────────────────────────────
+function ChatBubble({ role, text }) {
+  const isUser = role === 'user';
+  return (
+    <div style={{
+      background: isUser ? C.blueLt : C.surface2,
+      borderLeft: `3px solid ${isUser ? C.blue : C.violet}`,
+      borderRadius: '0 8px 8px 0', padding: '9px 13px',
+      margin: isUser ? '8px 0 4px' : '4px 0 8px',
+      fontSize: 13.5, color: C.text, lineHeight: 1.55,
+    }} className="fade-in">
+      <div style={{ fontSize: '0.63rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: isUser ? C.blue : C.violet, marginBottom: 4 }}>
+        {isUser ? 'You' : 'AI Assistant'}
+      </div>
+      {text}
+    </div>
+  );
+}
+
+// ── Document preview renderer ────────────────────────────────────────────
+function DocPreview({ text }) {
+  if (!text) return <div style={{ color: C.textMute, fontSize: 13, padding: 24 }}>No content yet.</div>;
+  const lines = text.split('\n');
+  return (
+    <div style={{ fontFamily: "'Georgia','Times New Roman',serif", color: C.text, lineHeight: 1.75, fontSize: '0.92rem', padding: '28px 36px' }}>
+      {lines.map((line, i) => {
+        const t = line.trim();
+        if (!t) return <div key={i} style={{ height: 10 }} />;
+        // Answer line (10+ underscores)
+        if (/^_{10,}$/.test(t)) {
+          return <div key={i} style={{ borderBottom: '1.5px solid #64748b', margin: '10px 0 8px', height: 0, display: 'block' }} />;
+        }
+        // Total marks line
+        if (/\(Total for question/i.test(t)) {
+          return <div key={i} style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: C.blue, borderTop: `1px solid ${C.border}`, paddingTop: 6, marginTop: 10, marginBottom: 18 }}>{t}</div>;
+        }
+        // Mark indicator at end: (3) or (3 marks)
+        const markMatch = t.match(/^(.*?)\s*\((\d+)\s*(?:marks?)?\)\s*$/);
+        if (markMatch && markMatch[2]) {
+          const content = markMatch[1].trim();
+          const isQ = /^[0-9]/.test(content);
+          return (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: isQ ? '14px 0 4px' : '3px 0' }}>
+              <span style={{ fontWeight: isQ ? 700 : 400 }}>{content}</span>
+              <span style={{ fontWeight: 700, fontSize: '0.8rem', color: C.textMid, flexShrink: 0, marginLeft: 16, fontFamily: 'sans-serif' }}>({markMatch[2]})</span>
+            </div>
+          );
+        }
+        // Question number line (starts with digit or (a) etc.)
+        if (/^(\d+|[a-z]\)|[ivx]+\))/.test(t)) {
+          return <div key={i} style={{ fontWeight: 600, margin: '12px 0 4px' }}>{t}</div>;
+        }
+        return <div key={i} style={{ margin: '3px 0', color: t.startsWith('(') ? C.textMid : C.text }}>{t}</div>;
+      })}
+    </div>
+  );
+}
+
+// ── Content tabs ──────────────────────────────────────────────────────────
+function ContentTabs({ active, onChange }) {
+  const tabs = [
+    { id: 'worksheet',   icon: 'filetext',  label: 'Worksheet Editor' },
+    { id: 'markscheme',  icon: 'clipboard', label: 'Mark Scheme'      },
+    { id: 'chat',        icon: 'send',      label: 'AI Assistant'     },
+  ];
+  return (
+    <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.surface, paddingLeft: 24 }}>
+      {tabs.map(t => {
+        const on = t.id === active;
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '14px 20px 13px', display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: '0.82rem', fontWeight: on ? 700 : 500,
+            color: on ? C.text : C.textMute,
+            borderBottom: `2px solid ${on ? C.blue : 'transparent'}`,
+            marginBottom: -1, transition: 'color 0.15s, border-color 0.15s',
+            letterSpacing: on ? '-0.01em' : 'normal',
+          }}>
+            <Icon name={t.icon} size={14} color={on ? C.blue : C.textMute} />
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────
+function App() {
+  // Files
+  const [wsFile, setWsFile]       = useState(null);
+  const [msFile, setMsFile]       = useState(null);
+  const [specTxtFile, setSpecTxt] = useState(null);
+  const [specDocxFile, setSpecDocx] = useState(null);
+  const [pastedSpec, setPastedSpec] = useState('');
+
+  // Pipeline state
+  const [running, setRunning]       = useState(false);
+  const [currentStep, setCurrentStep] = useState(-1);
+  const [stepDetail, setStepDetail] = useState('');
+
+  // Results
+  const [worksheet, setWorksheet]   = useState('');
+  const [markscheme, setMarkscheme] = useState('');
+  const [hasResults, setHasResults] = useState(false);
+
+  // Tab & view state
+  const [activeTab, setActiveTab]     = useState('worksheet');
+  const [previewWs, setPreviewWs]     = useState(true);
+  const [previewMs, setPreviewMs]     = useState(true);
+
+  // Worksheet naming
+  const [wsTitle, setWsTitle]         = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [className, setClassName]     = useState('');
+  const [wsDate, setWsDate]           = useState('');
+
+  // Export
+  const [wsDocBytes, setWsDocBytes]   = useState(null);
+  const [msDocBytes, setMsDocBytes]   = useState(null);
+  const [genWs, setGenWs]   = useState(false);
+  const [genMs, setGenMs]   = useState(false);
+  const [wsFilename, setWsFilename] = useState('worksheet.docx');
+  const [msFilename, setMsFilename] = useState('markscheme.docx');
+
+  // Chat
+  const [chatMsgs, setChatMsgs]     = useState([]);
+  const [chatInput, setChatInput]   = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // Error
+  const [error, setError] = useState('');
+
+  const fileRef = (setter) => (e) => setter(e.target.files[0] || null);
+  const wsInputRef   = useRef();
+  const msInputRef   = useRef();
+  const specTxtRef   = useRef();
+  const specDocxRef  = useRef();
+  const chatEndRef   = useRef();
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
+
+  // ── Run pipeline ─────────────────────────────────────────────────────────
+  const runPipeline = async () => {
+    if (!wsFile) { setError('Please upload a Worksheet .docx file first.'); return; }
+    setError('');
+    setRunning(true);
+    setCurrentStep(0);
+    setHasResults(false);
+    setWsDocBytes(null);
+    setMsDocBytes(null);
+
+    const form = new FormData();
+    form.append('worksheet', wsFile);
+    if (msFile)       form.append('markscheme', msFile);
+    if (specTxtFile)  form.append('spec_txt', specTxtFile);
+    if (specDocxFile) form.append('spec_docx', specDocxFile);
+    if (pastedSpec)   form.append('pasted_spec', pastedSpec);
+
+    try {
+      const res = await fetch(`${API}/api/process`, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.done) {
+              setWorksheet(data.worksheet || '');
+              setMarkscheme(data.markscheme || '');
+              setHasResults(true);
+              setCurrentStep(STEPS.length);
+              setStepDetail('');
+              if (wsFile) setWsFilename(wsFile.name.replace(/\.docx$/i, '_enhanced.docx'));
+              if (wsFile) setMsFilename(wsFile.name.replace(/QP/i, 'MS').replace(/\.docx$/i, '.docx'));
+            } else {
+              setCurrentStep(data.step || 0);
+              setStepDetail(data.detail || '');
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      setError(`Error: ${err.message}. Make sure the server is running and your OpenAI API key is set.`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  const generateWs = async () => {
+    setGenWs(true);
+    try {
+      const res = await fetch(`${API}/api/export/worksheet`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: worksheet }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      setWsDocBytes(blob);
+    } catch (e) { setError(`Export failed: ${e.message}`); }
+    finally { setGenWs(false); }
+  };
+
+  const generateMs = async () => {
+    setGenMs(true);
+    try {
+      const res = await fetch(`${API}/api/export/markscheme`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: markscheme }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      setMsDocBytes(blob);
+    } catch (e) { setError(`Export failed: ${e.message}`); }
+    finally { setGenMs(false); }
+  };
+
+  const downloadBlob = (blob, name) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  const sendChat = async (msg) => {
+    const text = (msg || chatInput).trim();
+    if (!text) return;
+    setChatInput('');
+    setChatMsgs(prev => [...prev, { role: 'user', text }]);
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, worksheet, markscheme }),
+      });
+      const data = await res.json();
+      setChatMsgs(prev => [...prev, { role: 'assistant', text: data.reply }]);
+      if (data.updated_worksheet)  setWorksheet(data.updated_worksheet);
+      if (data.updated_markscheme) setMarkscheme(data.updated_markscheme);
+      if (data.updated_worksheet || data.updated_markscheme) {
+        setWsDocBytes(null); setMsDocBytes(null);
+      }
+    } catch (e) { setChatMsgs(prev => [...prev, { role: 'assistant', text: `Error: ${e.message}` }]); }
+    finally { setChatLoading(false); }
+  };
+
+  // ── QA validation ─────────────────────────────────────────────────────────
+  const qaOverlap = (() => {
+    if (!worksheet || !markscheme) return null;
+    const words = t => new Set(t.toLowerCase().match(/\b[a-z]{5,}\b/g) || []);
+    const w1 = words(worksheet), w2 = words(markscheme);
+    if (!w1.size) return null;
+    return Math.round(([...w1].filter(x => w2.has(x)).length / w1.size) * 100);
+  })();
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
+
+      {/* ── SIDEBAR ── */}
+      <aside style={{
+        width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column',
+        background: `linear-gradient(180deg, ${C.surface} 0%, #131929 100%)`,
+        borderRight: `1px solid ${C.border}`, overflow: 'auto',
+      }}>
+        {/* Logo */}
+        <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Logo size={38} />
+            <div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>examqa.</div>
+              <div style={{ fontSize: '0.62rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Worksheet Studio</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '0 16px', flex: 1 }}>
+          {/* Documents */}
+          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '16px 0 7px' }}>Documents</div>
+
+          {/* Worksheet upload */}
+          <div onClick={() => !wsFile && wsInputRef.current.click()} style={{ cursor: wsFile ? 'default' : 'pointer' }}>
+            <UploadZone icon="doc" label="Worksheet" hint=".docx · click to upload" required file={wsFile} onClear={() => setWsFile(null)} />
+          </div>
+          <input ref={wsInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setWsFile)} />
+
+          {/* Mark scheme upload */}
+          <div onClick={() => !msFile && msInputRef.current.click()} style={{ cursor: msFile ? 'default' : 'pointer' }}>
+            <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx · click to upload" required file={msFile} onClear={() => setMsFile(null)} />
+          </div>
+          <input ref={msInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setMsFile)} />
+
+          <Divider />
+
+          {/* Spec section */}
+          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 7 }}>
+            Specification <span style={{ fontWeight: 400, textTransform: 'none' }}>— optional</span>
+          </div>
+          <div onClick={() => !specTxtFile && specTxtRef.current.click()} style={{ cursor: specTxtFile ? 'default' : 'pointer' }}>
+            <UploadZone icon="alignleft" label="Spec (.txt)" hint=".txt · click to upload" required={false} file={specTxtFile} onClear={() => setSpecTxt(null)} />
+          </div>
+          <input ref={specTxtRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={fileRef(setSpecTxt)} />
+
+          <div onClick={() => !specDocxFile && specDocxRef.current.click()} style={{ cursor: specDocxFile ? 'default' : 'pointer' }}>
+            <UploadZone icon="alignleft" label="Spec (.docx)" hint=".docx · click to upload" required={false} file={specDocxFile} onClear={() => setSpecDocx(null)} />
+          </div>
+          <input ref={specDocxRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setSpecDocx)} />
+
+          <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or paste specification text</div>
+          <textarea
+            value={pastedSpec}
+            onChange={e => setPastedSpec(e.target.value)}
+            placeholder="Paste specification text here…"
+            style={{
+              width: '100%', height: 80, background: C.surface3,
+              border: `1px solid ${C.border}`, borderRadius: 8, color: C.text,
+              fontSize: 11.5, padding: '8px 10px', outline: 'none', resize: 'vertical',
+            }}
+          />
+
+          <Divider />
+
+          {/* Run button */}
+          <button
+            onClick={runPipeline}
+            disabled={running || !wsFile}
+            style={{
+              width: '100%', padding: '10px 0', borderRadius: 9, border: 'none',
+              background: (running || !wsFile) ? C.surface3 : 'linear-gradient(135deg,#2563eb,#7c3aed)',
+              color: (running || !wsFile) ? C.textMute : '#fff',
+              fontWeight: 700, fontSize: '0.85rem', cursor: (running || !wsFile) ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              boxShadow: (!running && wsFile) ? '0 4px 14px rgba(124,58,237,0.4)' : 'none',
+              transition: 'all 0.2s',
+            }}
+          >
+            {running
+              ? <><Spinner size={14} /> Running…</>
+              : <><Icon name="sparkles" size={15} color="#fff" /> Run Enhancement Pipeline</>
+            }
+          </button>
+          <div style={{ fontSize: '0.66rem', color: C.textMute, textAlign: 'center', marginTop: 6 }}>8-step AI pipeline · ~30 seconds</div>
+        </div>
+      </aside>
+
+      {/* ── MAIN CONTENT ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Navbar */}
+        <nav style={{
+          background: C.surface, borderBottom: `1px solid ${C.border}`,
+          padding: '0 24px', height: 64, display: 'flex', alignItems: 'center',
+          gap: 12, flexShrink: 0,
+        }}>
+          <Logo size={34} />
+          <div>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: C.text, letterSpacing: '-0.01em', lineHeight: 1.2 }}>GCSE Worksheet QA Studio</div>
+            <div style={{ fontSize: '0.68rem', color: C.textMute, lineHeight: 1 }}>AI-powered exam paper enhancement</div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {hasResults && (
+              <button
+                onClick={() => { generateWs(); generateMs(); }}
+                style={{
+                  background: 'linear-gradient(135deg,#2563eb,#7c3aed)', color: '#fff',
+                  border: 'none', borderRadius: 8, padding: '7px 14px',
+                  fontSize: '0.77rem', fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  boxShadow: '0 2px 8px rgba(124,58,237,0.4)',
+                }}
+              ><Icon name="export" size={14} color="#fff" /> Export All</button>
+            )}
+          </div>
+        </nav>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+
+          {/* Error banner */}
+          {error && (
+            <div style={{ background: 'rgba(248,113,113,0.12)', border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 0, padding: '10px 24px', fontSize: '0.82rem', color: C.red, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="x" size={15} color={C.red} strokeWidth={2.5} /> {error}
+              <button onClick={() => setError('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.red, cursor: 'pointer', display:'flex', alignItems:'center' }}><Icon name="x" size={15} color={C.red} strokeWidth={2.5} /></button>
+            </div>
+          )}
+
+          {/* Pipeline — shown while running or after done */}
+          {(running || hasResults) && (
+            <Pipeline currentStep={currentStep} stepDetail={stepDetail} />
+          )}
+
+          {/* Welcome / idle state */}
+          {!running && !hasResults && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16, padding: 40 }}>
+              <Logo size={56} />
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', textAlign: 'center' }}>
+                GCSE Worksheet <span className="grad-text">QA Studio</span>
+              </div>
+              <div style={{ fontSize: '0.88rem', color: C.textMute, textAlign: 'center', maxWidth: 420, lineHeight: 1.6 }}>
+                Upload your worksheet and mark scheme in the sidebar, then click <strong style={{ color: C.text }}>Run Enhancement Pipeline</strong> to begin the 8-step AI enhancement.
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {['Command word alignment', 'Mark scheme structure', 'Cognitive balance', 'Topic coverage', 'GCSE-style revision'].map(t => (
+                  <span key={t} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, color: C.textMid, display:'inline-flex', alignItems:'center', gap:5 }}><Icon name="check" size={11} color={C.blue} strokeWidth={2.5} />{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Worksheet naming header (shown when results are ready) */}
+          {hasResults && (
+            <div style={{ padding: '14px 24px', borderBottom: `1px solid ${C.border}`, background: C.surface, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }} className="fade-in">
+              <input
+                value={wsTitle}
+                onChange={e => setWsTitle(e.target.value)}
+                placeholder="Worksheet title…"
+                style={{ background: 'none', border: 'none', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: '1rem', fontWeight: 700, outline: 'none', minWidth: 200, padding: '2px 4px', flex: 2 }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 130 }}>
+                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600, whiteSpace: 'nowrap' }}>Student:</span>
+                <input value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="Name" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 100 }}>
+                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600 }}>Class:</span>
+                <input value={className} onChange={e => setClassName(e.target.value)} placeholder="e.g. 11B" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 100 }}>
+                <span style={{ fontSize: '0.68rem', color: C.textMute, fontWeight: 600 }}>Date:</span>
+                <input value={wsDate} onChange={e => setWsDate(e.target.value)} placeholder="DD/MM/YYYY" style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: '0.8rem', padding: '4px 10px', outline: 'none', width: '100%' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Content tabs (shown when results are ready) */}
+          {hasResults && <ContentTabs active={activeTab} onChange={setActiveTab} />}
+
+          {/* Results */}
+          {hasResults && (
+            <div>
+
+              {/* QA banner — shown on worksheet tab */}
+              {activeTab === 'worksheet' && qaOverlap !== null && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 14, margin: '16px 24px 0',
+                  background: qaOverlap >= 40 ? C.greenLt : 'rgba(248,113,113,0.1)',
+                  border: `1px solid ${qaOverlap >= 40 ? C.greenBrd : 'rgba(248,113,113,0.3)'}`,
+                  borderRadius: 10, padding: '12px 18px',
+                }} className="fade-in">
+                  <Icon name={qaOverlap >= 40 ? 'checkcircle' : 'x'} size={22} color={qaOverlap >= 40 ? C.green : C.red} />
+                  <div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Keyword Alignment</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: qaOverlap >= 40 ? C.green : C.red }}>{qaOverlap}%</div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: '0.8rem', color: C.textMute }}>
+                    {qaOverlap >= 40 ? 'Good alignment between worksheet and mark scheme' : 'Low overlap — check content alignment'}
+                  </div>
+                </div>
+              )}
+
+              {/* ── WORKSHEET TAB ── */}
+              {activeTab === 'worksheet' && (
+                <div style={{ padding: '0 24px 40px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 10px' }}>
+                    <div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: C.text }}>Enhanced Worksheet</div>
+                      <div style={{ fontSize: '0.72rem', color: C.textMute, marginTop: 2 }}>Review, edit, then export to .docx</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {[['Preview', true], ['Edit', false]].map(([lbl, val]) => (
+                        <button key={lbl} onClick={() => setPreviewWs(val)} style={{
+                          background: previewWs === val ? C.surface3 : 'none',
+                          border: `1px solid ${previewWs === val ? C.border2 : C.border}`,
+                          borderRadius: 7, padding: '5px 14px', color: previewWs === val ? C.text : C.textMute,
+                          fontSize: '0.78rem', fontWeight: previewWs === val ? 600 : 400, cursor: 'pointer',
+                        }}>{lbl}</button>
+                      ))}
+                      {!wsDocBytes
+                        ? <button onClick={generateWs} disabled={genWs} style={{ background: C.blue, color:'#fff', border:'none', borderRadius:7, padding:'5px 14px', fontSize:'0.78rem', fontWeight:600, cursor: genWs ? 'not-allowed' : 'pointer', opacity: genWs ? 0.7 : 1, display:'flex', alignItems:'center', gap:6 }}>
+                            {genWs ? <><Spinner size={12}/> Generating…</> : <><Icon name="download" size={13} color="#fff"/> Export .docx</>}
+                          </button>
+                        : <button onClick={() => downloadBlob(wsDocBytes, wsFilename)} style={{ background: C.green, color:'#fff', border:'none', borderRadius:7, padding:'5px 14px', fontSize:'0.78rem', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                            <Icon name="download" size={13} color="#fff"/> Download
+                          </button>
+                      }
+                    </div>
+                  </div>
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', minHeight: 400 }}>
+                    {previewWs
+                      ? <DocPreview text={worksheet} />
+                      : <textarea value={worksheet} onChange={e => { setWorksheet(e.target.value); setWsDocBytes(null); }}
+                          style={{ width:'100%', minHeight:460, background:'transparent', border:'none', color: C.text, fontFamily:"'Fira Code','Courier New',monospace", fontSize:12.5, lineHeight:1.65, padding:'20px 24px', outline:'none', resize:'vertical' }}
+                        />
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* ── MARK SCHEME TAB ── */}
+              {activeTab === 'markscheme' && (
+                <div style={{ padding: '0 24px 40px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 10px' }}>
+                    <div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: C.text }}>Mark Scheme</div>
+                      <div style={{ fontSize: '0.72rem', color: C.textMute, marginTop: 2 }}>Review, edit, then export to .docx</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {[['Preview', true], ['Edit', false]].map(([lbl, val]) => (
+                        <button key={lbl} onClick={() => setPreviewMs(val)} style={{
+                          background: previewMs === val ? C.surface3 : 'none',
+                          border: `1px solid ${previewMs === val ? C.border2 : C.border}`,
+                          borderRadius: 7, padding: '5px 14px', color: previewMs === val ? C.text : C.textMute,
+                          fontSize: '0.78rem', fontWeight: previewMs === val ? 600 : 400, cursor: 'pointer',
+                        }}>{lbl}</button>
+                      ))}
+                      {!msDocBytes
+                        ? <button onClick={generateMs} disabled={genMs} style={{ background: C.violet, color:'#fff', border:'none', borderRadius:7, padding:'5px 14px', fontSize:'0.78rem', fontWeight:600, cursor: genMs ? 'not-allowed' : 'pointer', opacity: genMs ? 0.7 : 1, display:'flex', alignItems:'center', gap:6 }}>
+                            {genMs ? <><Spinner size={12}/> Generating…</> : <><Icon name="download" size={13} color="#fff"/> Export .docx</>}
+                          </button>
+                        : <button onClick={() => downloadBlob(msDocBytes, msFilename)} style={{ background: C.green, color:'#fff', border:'none', borderRadius:7, padding:'5px 14px', fontSize:'0.78rem', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                            <Icon name="download" size={13} color="#fff"/> Download
+                          </button>
+                      }
+                    </div>
+                  </div>
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', minHeight: 400 }}>
+                    {previewMs
+                      ? <DocPreview text={markscheme} />
+                      : <textarea value={markscheme} onChange={e => { setMarkscheme(e.target.value); setMsDocBytes(null); }}
+                          style={{ width:'100%', minHeight:460, background:'transparent', border:'none', color: C.text, fontFamily:"'Fira Code','Courier New',monospace", fontSize:12.5, lineHeight:1.65, padding:'20px 24px', outline:'none', resize:'vertical' }}
+                        />
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* ── AI ASSISTANT TAB ── */}
+              {activeTab === 'chat' && (
+                <div style={{ padding: '0 24px 40px' }}>
+                  <div style={{ margin: '18px 0 14px' }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: C.text }}>AI Assistant</div>
+                    <div style={{ fontSize: '0.72rem', color: C.textMute, marginTop: 2 }}>Make targeted edits — changes apply to your documents automatically</div>
+                  </div>
+
+                  {/* Suggestion chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    {['Change Olivia to Mustafa throughout', 'Make Q3b an explain question, 4 marks', 'Fix the calculation in question 2'].map(c => (
+                      <button key={c} onClick={() => sendChat(c)} style={{
+                        background: C.blueLt, border: `1px solid rgba(59,130,246,0.2)`,
+                        borderRadius: 20, padding: '5px 14px', fontSize: 11.5,
+                        color: C.blue, fontWeight: 500, cursor: 'pointer',
+                      }}>{c}</button>
+                    ))}
+                  </div>
+
+                  {/* Chat welcome */}
+                  {chatMsgs.length === 0 && (
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px', display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }} className="fade-in">
+                      <Logo size={36} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.88rem', color: C.text, marginBottom: 4 }}>examqa AI</div>
+                        <div style={{ fontSize: '0.84rem', color: C.textMid, lineHeight: 1.6 }}>
+                          Hi! I can help you improve your worksheet questions, suggest mark schemes, or answer questions about exam board requirements. What would you like to work on?
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Messages */}
+                  {chatMsgs.length > 0 && (
+                    <div style={{ maxHeight: 380, overflowY: 'auto', marginBottom: 12, display:'flex', flexDirection:'column', gap: 4 }}>
+                      {chatMsgs.map((m, i) => <ChatBubble key={i} role={m.role} text={m.text} />)}
+                      {chatLoading && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', color: C.textMute, fontSize: 13 }}>
+                          <Spinner size={14} /> AI is thinking…
+                        </div>
+                      )}
+                      <div ref={chatEndRef} />
+                  </div>
+                )}
+
+                {/* Input */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChat()}
+                    placeholder="Ask the AI to make changes…"
+                    style={{
+                      flex: 1, background: C.surface2, border: `1px solid ${C.border}`,
+                      borderRadius: 8, padding: '10px 14px', color: C.text, fontSize: 13.5,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={() => sendChat()}
+                    disabled={chatLoading || !chatInput.trim()}
+                    style={{
+                      background: C.blue, color: '#fff', border: 'none', borderRadius: 8,
+                      padding: '0 18px', fontWeight: 700, fontSize: '0.85rem',
+                      cursor: (chatLoading || !chatInput.trim()) ? 'not-allowed' : 'pointer',
+                      opacity: (chatLoading || !chatInput.trim()) ? 0.6 : 1,
+                    }}
+                  ><Icon name="send" size={14} color="#fff" /></button>
+                </div>
+              </div>
+              )}
+
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
