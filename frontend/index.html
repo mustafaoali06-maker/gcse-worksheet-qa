@@ -504,6 +504,7 @@ function App() {
     setHasResults(false);
     setWsDocBytes(null);
     setMsDocBytes(null);
+    setChatMsgs([]); setChatInput('');
 
     const form = new FormData();
     form.append('worksheet', wsFile);
