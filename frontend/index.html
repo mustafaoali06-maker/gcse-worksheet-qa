@@ -196,8 +196,21 @@ function Pipeline({ currentStep, stepDetail }) {
   const parallelFiring = currentStep === 3;
   const done = currentStep >= STEPS.length;
 
-  // Progress: parallel group counts as 4 steps visually
-  const pct = done ? 100 : Math.min(95, Math.round((currentStep / STEPS.length) * 100));
+  // Slowly animate the bar while parallel agents run, so it doesn't sit frozen at 37%
+  const [animPct, setAnimPct] = React.useState(null);
+  React.useEffect(() => {
+    if (currentStep === 3) {
+      setAnimPct(38);
+      const id = setInterval(() => {
+        setAnimPct(p => (p < 83 ? parseFloat((p + 0.4).toFixed(1)) : 83));
+      }, 500); // +0.4% every 500 ms → ~56 s to travel 38→83%
+      return () => clearInterval(id);
+    }
+    setAnimPct(null);
+  }, [currentStep]);
+
+  const basePct = done ? 100 : Math.min(95, Math.round((currentStep / STEPS.length) * 100));
+  const pct = (parallelFiring && animPct !== null) ? animPct : basePct;
 
   return (
     <div style={{

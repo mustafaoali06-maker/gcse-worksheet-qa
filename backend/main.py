@@ -277,19 +277,44 @@ CONTENT RULES:
 6. Ensure every multi-mark question has appropriate cognitive demand.
 7. Numbers in question stems should be written as WORDS (e.g. "two" not "2"), EXCEPT for: physical values (e.g. "15 m/s"), equations, or units.
 
+COMMAND WORD RULES (CRITICAL):
+8. Every question instruction — whether a main question or a sub-part — MUST start with a GCSE command word.
+   Accepted command words: Explain, State, Describe, Calculate, Determine, Show that, Identify, Give, Name,
+   Suggest, Compare, Evaluate, Predict, Draw, Plot, Label, Complete, Define, Outline, Justify, Use, Write.
+9. NEVER phrase a question instruction as an interrogative sentence starting with "What", "Which", "Why",
+   "How", "When" or "Where". Convert these to command-word form:
+     - "What is the unit of force?" → "State the unit of force."
+     - "Which type of wave is used in optical fibres?" → "Identify the type of wave used in optical fibres."
+     - "Why does the wave slow down?" → "Explain why the wave slows down."
+     - "How does a concave mirror improve the beam?" → "Explain how a concave mirror improves the beam."
+10. Context / scenario sentences (e.g. "A student connects a circuit. The reading is 3 A.") are ALLOWED
+    and should come BEFORE the command-word instruction on a separate line. Context is NOT the instruction.
+    Example format:
+        Radio waves are used for broadcasting.
+        Explain why radio waves can be received over large distances.   (2)
+
 FORMATTING RULES:
-8. Remove ALL topic headers (e.g. "Work and Energy Transfers", "Forces", "Section A").
-9. Remove ALL formatting symbols: *, #, bullet points, dashes used as headers.
-10. In any question context/stem text, replace " = " and " - " used as label separators with ": ".
+11. Remove ALL topic headers (e.g. "Work and Energy Transfers", "Forces", "Section A").
+12. Remove ALL formatting symbols: *, #, bullet points, dashes used as headers.
+13. In any question context/stem text, replace " = " and " - " used as label separators with ": ".
     Example: "Work Done = Force x Distance" in a context line -> "Work done: force x distance"
-11. Question numbering must be consistent: 1, 2, 3 ... (a), (b), (c) ... (i), (ii), (iii).
+14. Question numbering must be consistent: 1, 2, 3 ... (a), (b), (c) ... (i), (ii), (iii).
     - Main question numbers should NOT have a dot (use "1" not "1.")
-12. Do NOT add answer lines - these are handled separately.
-13. Keep mark allocations exactly as shown, e.g. (2).
-14. Ensure there is NO space between sub-parts (a), (b), (c) of the SAME question.
-15. There SHOULD be a blank line between separate main questions (1, 2, 3...).
-16. Do NOT completely rewrite questions - only improve clarity and GCSE realism.
-17. If a question has sub-parts (a)(i), (a)(ii), the letter (a) alone should NOT be on its own line
+15. Every main question number (1, 2, 3...) MUST include an introductory sentence of its own BEFORE any
+    sub-parts. Never leave a main question number bare with no text on its line.
+    Example of CORRECT format:
+        3  A student investigates refraction of light at a glass block.
+           (a) State what happens to the speed of light as it enters the glass.   (1)
+           (b) Explain why the ray changes direction at the boundary.   (2)
+    Example of INCORRECT format (bare question number — NEVER do this):
+        3
+           (a) State what happens to the speed of light...
+16. Do NOT add answer lines - these are handled separately.
+17. Keep mark allocations exactly as shown, e.g. (2).
+18. Ensure there is NO space between sub-parts (a), (b), (c) of the SAME question.
+19. There SHOULD be a blank line between separate main questions (1, 2, 3...).
+20. Do NOT completely rewrite questions - only improve clarity and GCSE realism.
+21. If a question has sub-parts (a)(i), (a)(ii), the letter (a) alone should NOT be on its own line
     if it only introduces roman-numeral sub-parts. Use the format:
     (a) (i) question text here   (1)
         (ii) question text here  (2)
