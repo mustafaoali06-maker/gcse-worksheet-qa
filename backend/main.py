@@ -8,6 +8,8 @@ import re
 import json
 import base64
 import secrets
+import asyncio
+import hashlib
 from io import BytesIO
 from typing import Optional
 from pathlib import Path
@@ -21,7 +23,7 @@ from docx.shared import Cm, Pt
 from docx.enum.text import WD_TAB_ALIGNMENT, WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 # Import agent prompts
 import sys
@@ -44,6 +46,11 @@ from agents import (
 # ============================================================================
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+async_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Simple in-memory export cache — keyed by SHA-256 of text content.
+# Avoids re-running the formatting agent on every download of the same text.
+_export_cache: dict = {}
 
 ANSWER_LINE = "_____________________________________________________________________________"
 ANSWER_UNDERSCORES = {0: 79, 1: 76, 2: 72}
@@ -255,7 +262,7 @@ def read_spec_text(
 # ============================================================================
 
 
-def improve_worksheet(text: str) -> str:
+async def improve_worksheet(text: str) -> str:
     """Improve worksheet quality and formatting using AI."""
     prompt = """
 You are improving a GCSE worksheet to match a professional exam-standard format.
@@ -290,7 +297,7 @@ FORMATTING RULES:
 OUTPUT:
 Return the improved worksheet only. No commentary or explanations.
 """
-    response = client.chat.completions.create(
+    response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": prompt},
@@ -301,7 +308,7 @@ Return the improved worksheet only. No commentary or explanations.
     return add_answer_lines(clean_text(response.choices[0].message.content))
 
 
-def generate_markscheme(text: str, mismatch_info: Optional[str] = None) -> str:
+async def generate_markscheme(text: str, mismatch_info: Optional[str] = None) -> str:
     """Generate a mark scheme from the worksheet text."""
     mismatch_block = ""
     if mismatch_info:
@@ -355,7 +362,7 @@ Question mapping and numbering:
 - Only start a new question number at the beginning of a line.
 """
 
-    response = client.chat.completions.create(
+    response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": prompt},
@@ -374,63 +381,61 @@ Question mapping and numbering:
     return clean_text(response.choices[0].message.content)
 
 
-def run_agent(prompt: str, content: str) -> str:
-    """Run an agent with a given prompt and content."""
-    response = client.chat.completions.create(
+async def improve_markscheme(worksheet_text: str, existing_ms: str) -> str:
+    """Improve and validate an uploaded mark scheme against the worksheet."""
+    prompt = f"""You are reviewing and improving an uploaded GCSE mark scheme against its worksheet.
+
+RULES:
+1. Keep all correct marking points — do NOT discard good content.
+2. Fix any marking points that are vague (e.g. "correct answer (1)") — replace with the actual answer.
+3. For CALCULATION questions ensure: equation shown, numerical substitution, answer with units.
+4. Ensure every question and sub-part in the worksheet has a corresponding mark scheme entry.
+5. Add any missing questions or sub-parts.
+6. Fix mark totals if they are wrong.
+7. Use "(Total for question X is Y marks)" format — "is" not "=".
+8. End with "Total marks for question paper: Z".
+9. Use (1) for each individual mark — never (2) for a single point.
+10. Remove ALL markdown symbols (#, *, etc.).
+
+Return the improved mark scheme only. No commentary.
+"""
+    response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": prompt},
-            {"role": "user", "content": content},
+            {
+                "role": "user",
+                "content": (
+                    "WORKSHEET:\n" + worksheet_text
+                    + "\n\nUPLOADED MARK SCHEME TO IMPROVE:\n" + existing_ms
+                ),
+            },
         ],
         temperature=0,
     )
-    return response.choices[0].message.content
+    return clean_text(response.choices[0].message.content)
 
 
-def run_full_revision_via_agents(
-    worksheet_text: str,
-    markscheme_text: str,
-    spec_text: str,
-) -> str:
-    """Run all five validation agents and return revised output."""
-    combined_ws_ms = f"WORKSHEET:\n{worksheet_text}\n\nMARK SCHEME:\n{markscheme_text}"
+async def run_agent(prompt: str, content: str, model: str = "gpt-4o-mini") -> str:
+    """Run an agent. Retries up to 2 times on transient errors with exponential back-off."""
+    last_err: Exception = RuntimeError("No attempts made")
+    for attempt in range(3):
+        try:
+            response = await async_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": content},
+                ],
+                temperature=0,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)  # 1 s, then 2 s
+    raise last_err
 
-    agent_steps = [
-        ("Checking command word alignment...", AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
-        ("Verifying mark allocations...", AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
-        ("Checking physics accuracy...", AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}"),
-    ]
-    coverage_input = f"WORKSHEET AND MARK SCHEME:\n{combined_ws_ms}\n\nINTENDED SCOPE:\n{spec_text}"
-    agent_steps.append(("Evaluating topic coverage...", AGENT_4_PROMPT, coverage_input))
-
-    reports = []
-    for label, prompt, content in agent_steps:
-        reports.append(run_agent(prompt, content))
-
-    report1, report2, report3, report4 = reports
-
-    combined_input = f"""ORIGINAL WORKSHEET:
-{worksheet_text}
-
-ORIGINAL MARK SCHEME:
-{markscheme_text}
-
-INTENDED SCOPE:
-{spec_text}
-
-AGENT 1 REPORT:
-{report1}
-
-AGENT 2 REPORT:
-{report2}
-
-AGENT 3 REPORT:
-{report3}
-
-AGENT 4 REPORT:
-{report4}
-"""
-    return run_agent(AGENT_5_PROMPT, combined_input)
 
 
 def parse_revised_output(text: str) -> tuple:
@@ -448,10 +453,10 @@ def parse_revised_output(text: str) -> tuple:
     return None, None
 
 
-def run_formatting_agent(worksheet_text: str) -> dict:
+async def run_formatting_agent(worksheet_text: str) -> dict:
     """Run formatting agent to get JSON structure for document building."""
     cleaned = strip_answer_lines(clean_text(worksheet_text))
-    response = client.chat.completions.create(
+    response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": FORMATTING_AGENT_PROMPT},
@@ -803,55 +808,62 @@ async def process_stream_generator(
     markscheme_bytes: Optional[bytes],
     spec_text: str,
 ):
-    """Async generator for streaming processing steps."""
+    """Async generator for streaming processing steps.
+
+    Pipeline:
+      0 — Read & parse files
+      1 — Enhance worksheet  (gpt-4o-mini)
+      2 — Build/improve mark scheme  (gpt-4o-mini)
+      3 — Agents 1-4 run IN PARALLEL  (gpt-4o-mini × 4 concurrent)
+      4 — Agent 5 final revision  (gpt-4o — higher quality for the critical rewrite)
+    """
     step = 0
 
-    # Step 0: Read files
+    # ── Step 0: Read files ────────────────────────────────────────────────────
     yield f'data: {json.dumps({"step": step, "label": "Reading files", "detail": "Parsing documents"})}\n\n'
     worksheet_text = extract_docx(worksheet_bytes)
-    markscheme_text = extract_docx(markscheme_bytes) if markscheme_bytes else ""
+    existing_ms_text = extract_docx(markscheme_bytes) if markscheme_bytes else ""
     step += 1
 
-    # Step 1: Improve worksheet
+    # ── Step 1: Improve worksheet ─────────────────────────────────────────────
     yield f'data: {json.dumps({"step": step, "label": "Enhancing worksheet", "detail": "Improving quality"})}\n\n'
-    improved_ws = improve_worksheet(worksheet_text)
+    improved_ws = await improve_worksheet(worksheet_text)
     step += 1
 
-    # Step 2: Generate mark scheme
-    yield f'data: {json.dumps({"step": step, "label": "Generating mark scheme", "detail": "Creating marking points"})}\n\n'
-    improved_ms = generate_markscheme(improved_ws)
+    # ── Step 2: Build / improve mark scheme ───────────────────────────────────
+    if existing_ms_text.strip():
+        # Teacher uploaded their own mark scheme — improve it rather than discard it
+        yield f'data: {json.dumps({"step": step, "label": "Improving mark scheme", "detail": "Polishing uploaded mark scheme"})}\n\n'
+        improved_ms = await improve_markscheme(improved_ws, existing_ms_text)
+    else:
+        yield f'data: {json.dumps({"step": step, "label": "Generating mark scheme", "detail": "Creating marking points"})}\n\n'
+        improved_ms = await generate_markscheme(improved_ws)
     step += 1
 
-    # Step 3: Agent 1 — Command words
-    yield f'data: {json.dumps({"step": step, "label": "Agent 1", "detail": "Checking command words"})}\n\n'
+    # ── Steps 3-6: Agents 1-4 run IN PARALLEL ────────────────────────────────
+    yield f'data: {json.dumps({"step": step, "label": "Agents 1–4", "detail": "Running all checks in parallel"})}\n\n'
     combined = f"WORKSHEET:\n{improved_ws}\n\nMARK SCHEME:\n{improved_ms}"
-    r1 = run_agent(AGENT_1_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined}")
-    step += 1
+    combined_input = f"WORKSHEET AND MARK SCHEME:\n{combined}"
+    coverage_input = f"{combined_input}\n\nINTENDED SCOPE:\n{spec_text}"
 
-    # Step 4: Agent 2 — Mark structure
-    yield f'data: {json.dumps({"step": step, "label": "Agent 2", "detail": "Verifying structure"})}\n\n'
-    r2 = run_agent(AGENT_2_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined}")
-    step += 1
+    r1, r2, r3, r4 = await asyncio.gather(
+        run_agent(AGENT_1_PROMPT, combined_input),
+        run_agent(AGENT_2_PROMPT, combined_input),
+        run_agent(AGENT_3_PROMPT, combined_input),
+        run_agent(AGENT_4_PROMPT, coverage_input),
+    )
+    step += 4  # accounts for steps 3, 4, 5, 6
 
-    # Step 5: Agent 3 — Cognitive balance
-    yield f'data: {json.dumps({"step": step, "label": "Agent 3", "detail": "Checking balance"})}\n\n'
-    r3 = run_agent(AGENT_3_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined}")
-    step += 1
-
-    # Step 6: Agent 4 — Topic coverage
-    yield f'data: {json.dumps({"step": step, "label": "Agent 4", "detail": "Evaluating coverage"})}\n\n'
-    r4 = run_agent(AGENT_4_PROMPT, f"WORKSHEET AND MARK SCHEME:\n{combined}\n\nINTENDED SCOPE:\n{spec_text}")
-    step += 1
-
-    # Step 7: Agent 5 — Intelligent revision
-    yield f'data: {json.dumps({"step": step, "label": "Agent 5", "detail": "Finalizing revision"})}\n\n'
+    # ── Step 7: Agent 5 — final intelligent revision (gpt-4o) ─────────────────
+    yield f'data: {json.dumps({"step": step, "label": "Agent 5", "detail": "Finalising revision"})}\n\n'
     agent5_input = (
         f"ORIGINAL WORKSHEET:\n{improved_ws}\n\nORIGINAL MARK SCHEME:\n{improved_ms}\n\n"
         f"INTENDED SCOPE:\n{spec_text}\n\n"
         f"AGENT 1 REPORT:\n{r1}\n\nAGENT 2 REPORT:\n{r2}\n\n"
         f"AGENT 3 REPORT:\n{r3}\n\nAGENT 4 REPORT:\n{r4}"
     )
-    final_text = run_agent(AGENT_5_PROMPT, agent5_input)
+    # gpt-4o for Agent 5 — the critical rewrite step that synthesises all reports
+    final_text = await run_agent(AGENT_5_PROMPT, agent5_input, model="gpt-4o")
     revised_ws, revised_ms = parse_revised_output(final_text)
     if revised_ws:
         improved_ws = revised_ws
@@ -889,30 +901,47 @@ async def process_worksheet(
 
 @app.post("/api/export/worksheet")
 async def export_worksheet(request: Request):
-    """Export worksheet text as a DOCX file."""
+    """Export worksheet text as a DOCX file. Result is cached by content hash."""
     body = await request.json()
     text = body.get("text", "")
-    spec = run_formatting_agent(text)
-    docx_bytes = build_formatted_docx(spec)
+    filename = body.get("filename", "worksheet.docx")
+
+    cache_key = "ws_" + hashlib.sha256(text.encode()).hexdigest()
+    if cache_key not in _export_cache:
+        if len(_export_cache) >= 100:
+            # Evict oldest 50 entries
+            for k in list(_export_cache.keys())[:50]:
+                del _export_cache[k]
+        spec = await run_formatting_agent(text)
+        docx_bytes = build_formatted_docx(spec)
+        _export_cache[cache_key] = docx_bytes.getvalue()
 
     return StreamingResponse(
-        iter([docx_bytes.getvalue()]),
+        iter([_export_cache[cache_key]]),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": "attachment; filename=worksheet.docx"},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @app.post("/api/export/markscheme")
 async def export_markscheme(request: Request):
-    """Export mark scheme text as a DOCX file."""
+    """Export mark scheme text as a DOCX file. Result is cached by content hash."""
     body = await request.json()
     text = body.get("text", "")
-    docx_bytes = build_markscheme_docx(text)
+    filename = body.get("filename", "markscheme.docx")
+
+    cache_key = "ms_" + hashlib.sha256(text.encode()).hexdigest()
+    if cache_key not in _export_cache:
+        if len(_export_cache) >= 100:
+            for k in list(_export_cache.keys())[:50]:
+                del _export_cache[k]
+        docx_bytes = build_markscheme_docx(text)
+        _export_cache[cache_key] = docx_bytes.getvalue()
 
     return StreamingResponse(
-        iter([docx_bytes.getvalue()]),
+        iter([_export_cache[cache_key]]),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": "attachment; filename=markscheme.docx"},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -920,20 +949,19 @@ async def export_markscheme(request: Request):
 async def chat_endpoint(request: Request):
     """
     Chat endpoint for interactive revisions.
-    Body: {"message": str, "worksheet": str, "markscheme": str}
+    Body: {"message": str, "worksheet": str, "markscheme": str, "history": list}
     Returns: {"reply": str, "updated_worksheet": str|null, "updated_markscheme": str|null}
     """
     body = await request.json()
     message = body.get("message", "")
     worksheet = body.get("worksheet", "")
     markscheme = body.get("markscheme", "")
+    # History: list of {role, text} — cap at last 10 messages to control token usage
+    history = body.get("history", [])[-10:]
 
     system_prompt = """You are an AI assistant helping a teacher edit a GCSE physics worksheet and mark scheme.
 
-You will receive:
-- A user instruction (e.g. "Change Olivia to Mustafa throughout", "Make Q3b an explain question worth 4 marks")
-- The current worksheet text
-- The current mark scheme text
+You have access to the conversation history so you can refer back to earlier requests (e.g. "undo that", "change it to 5 marks instead").
 
 Rules:
 1. If the instruction requires editing the worksheet, return the full updated worksheet after --- REVISED WORKSHEET ---.
@@ -953,20 +981,21 @@ Format your response as:
 [full updated mark scheme, if changed]
 """
 
-    user_content = f"""INSTRUCTION: {message}
+    # Build conversation: system + history (text only) + current message with full doc context
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history:
+        messages.append({"role": msg["role"], "content": msg["text"]})
+    messages.append({"role": "user", "content": f"""INSTRUCTION: {message}
 
 CURRENT WORKSHEET:
 {worksheet}
 
 CURRENT MARK SCHEME:
-{markscheme}"""
+{markscheme}"""})
 
-    response = client.chat.completions.create(
+    response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
+        messages=messages,
         temperature=0,
     )
     full_reply = response.choices[0].message.content

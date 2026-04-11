@@ -32,8 +32,10 @@
   textarea { resize: vertical; }
   .grad-text { background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .pipeline-bar { transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
-  @keyframes pulse-blue { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0.4)} 50%{box-shadow:0 0 0 8px rgba(59,130,246,0)} }
-  .card-active { animation: pulse-blue 2s ease-in-out infinite; }
+  @keyframes pulse-blue   { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0.4)}  50%{box-shadow:0 0 0 8px  rgba(59,130,246,0)} }
+  @keyframes pulse-violet { 0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,0.5)} 50%{box-shadow:0 0 0 10px rgba(139,92,246,0)} }
+  .card-active   { animation: pulse-blue   2s   ease-in-out infinite; }
+  .card-parallel { animation: pulse-violet 1.4s ease-in-out infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { animation: spin 0.8s linear infinite; }
   .fade-in { animation: fadeIn 0.3s ease; }
@@ -50,14 +52,14 @@ const { useState, useRef, useEffect, useCallback } = React;
 const API = '';  // same origin — FastAPI serves this file at /
 
 const STEPS = [
-  { icon: 'filetext',    label: 'Read Files',   detail: 'Parsing docs'        },
-  { icon: 'sparkles',    label: 'Enhance WS',   detail: 'Improving worksheet' },
-  { icon: 'clipboard',   label: 'Mark Scheme',  detail: 'Generating MS'       },
-  { icon: 'search',      label: 'Agent 1',      detail: 'Command words'       },
-  { icon: 'barchart',    label: 'Agent 2',      detail: 'Mark structure'      },
-  { icon: 'layers',      label: 'Agent 3',      detail: 'Cognitive balance'   },
-  { icon: 'bookopen',    label: 'Agent 4',      detail: 'Topic coverage'      },
-  { icon: 'checkcircle', label: 'Agent 5',      detail: 'Final revision'      },
+  { icon: 'filetext',    label: 'Read Files',  detail: 'Parsing docs',         parallel: false },
+  { icon: 'sparkles',    label: 'Enhance WS',  detail: 'Improving worksheet',  parallel: false },
+  { icon: 'clipboard',   label: 'Mark Scheme', detail: 'Building mark scheme', parallel: false },
+  { icon: 'search',      label: 'Agent 1',     detail: 'Command words',        parallel: true  },
+  { icon: 'barchart',    label: 'Agent 2',     detail: 'Mark structure',       parallel: true  },
+  { icon: 'layers',      label: 'Agent 3',     detail: 'Cognitive balance',    parallel: true  },
+  { icon: 'bookopen',    label: 'Agent 4',     detail: 'Topic coverage',       parallel: true  },
+  { icon: 'checkcircle', label: 'Agent 5',     detail: 'Final revision',       parallel: false },
 ];
 
 // ── Colour tokens (Figma Make v3) ─────────────────────────────────────────
@@ -189,8 +191,13 @@ function UploadZone({ icon, label, hint, required, file, onClear }) {
 
 // ── Pipeline progress strip ───────────────────────────────────────────────
 function Pipeline({ currentStep, stepDetail }) {
-  const pct = Math.min(100, Math.round((currentStep / STEPS.length) * 100));
+  // Agents 1-4 (indices 3-6) are fired together at SSE step=3
+  // They all complete at step=7 (when Agent 5 fires)
+  const parallelFiring = currentStep === 3;
   const done = currentStep >= STEPS.length;
+
+  // Progress: parallel group counts as 4 steps visually
+  const pct = done ? 100 : Math.min(95, Math.round((currentStep / STEPS.length) * 100));
 
   return (
     <div style={{
@@ -198,46 +205,88 @@ function Pipeline({ currentStep, stepDetail }) {
       borderBottom: `1px solid ${C.border}`,
       padding: '16px 24px 18px',
     }}>
-      <div style={{ fontSize: '0.72rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-        Processing Pipeline
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 500, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Processing Pipeline
+        </div>
+        {parallelFiring && (
+          <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:'0.65rem', fontWeight:600,
+            color:'#a78bfa', background:'rgba(139,92,246,0.12)', border:'1px solid rgba(139,92,246,0.25)',
+            borderRadius:20, padding:'2px 8px' }}>
+            <Icon name="zap" size={10} color="#a78bfa" /> 4 agents running in parallel
+          </div>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 10 }}>
         {STEPS.map((s, i) => {
-          const state = i < currentStep ? 'done' : i === currentStep && !done ? 'active' : 'pending';
+          const isParallelCard = s.parallel;
+          const isParallelActive = parallelFiring && isParallelCard;
+          // After parallel group fires (step>=7), cards 3-6 are done
+          const isParallelDone = currentStep >= 7 && isParallelCard;
+
+          const state = done || isParallelDone
+            ? 'done'
+            : isParallelActive
+            ? 'parallel'
+            : i < currentStep
+            ? 'done'
+            : i === currentStep
+            ? 'active'
+            : 'pending';
+
+          const borderCol = state === 'done' ? C.greenBrd : state === 'active' ? C.blue : state === 'parallel' ? '#8b5cf6' : C.border;
+          const bgCol     = state === 'done' ? C.greenLt  : state === 'active' ? C.blueLt  : state === 'parallel' ? 'rgba(139,92,246,0.1)' : C.surface;
+          const iconBg    = state === 'done' ? 'rgba(34,197,94,0.2)' : state === 'active' ? 'rgba(59,130,246,0.2)' : state === 'parallel' ? 'rgba(139,92,246,0.18)' : C.surface2;
+          const iconCol   = state === 'done' ? C.green : state === 'active' ? C.blue : state === 'parallel' ? '#a78bfa' : C.textMid;
+          const labelCol  = state === 'done' ? '#16a34a' : state === 'active' ? C.blue : state === 'parallel' ? '#a78bfa' : C.textMute;
+
           return (
             <div key={i} style={{
-              borderRadius: 12, padding: '14px 8px 12px', textAlign: 'center',
-              border: `${state === 'active' ? 2 : 1}px solid ${state === 'done' ? C.greenBrd : state === 'active' ? C.blue : C.border}`,
-              background: state === 'done' ? C.greenLt : state === 'active' ? C.blueLt : C.surface,
-              opacity: state === 'pending' ? 0.55 : 1, position: 'relative',
-              boxShadow: state === 'active' ? '0 0 0 2px rgba(59,130,246,0.25)' : 'none',
-            }} className={state === 'active' ? 'card-active' : ''}>
+              borderRadius: 12, padding: '12px 6px 10px', textAlign: 'center',
+              border: `${state === 'active' || state === 'parallel' ? 2 : 1}px solid ${borderCol}`,
+              background: bgCol,
+              opacity: state === 'pending' ? 0.5 : 1,
+              position: 'relative',
+              transition: 'all 0.3s ease',
+            }} className={state === 'active' ? 'card-active' : state === 'parallel' ? 'card-parallel' : ''}>
+
               {state === 'done' && (
-                <div style={{ position:'absolute', top:3, right:5 }}>
+                <div style={{ position:'absolute', top:4, right:5 }}>
                   <Icon name="check" size={10} color={C.green} strokeWidth={3} />
                 </div>
               )}
-              <div style={{
-                width: 40, height: 40, borderRadius: 10, margin: '0 auto 7px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: state === 'done' ? 'rgba(34,197,94,0.2)' : state === 'active' ? 'rgba(59,130,246,0.2)' : C.surface2,
-              }}>
-                <Icon name={state === 'done' ? 'check' : s.icon} size={20}
-                  color={state === 'done' ? C.green : state === 'active' ? C.blue : C.textMid}
-                  strokeWidth={state === 'done' ? 2.5 : 1.8}
-                />
+              {state === 'parallel' && (
+                <div style={{ position:'absolute', top:3, right:4,
+                  background:'rgba(139,92,246,0.2)', borderRadius:8, padding:'1px 4px',
+                  fontSize:'0.52rem', fontWeight:700, color:'#c4b5fd', letterSpacing:'0.02em' }}>
+                  ⚡
+                </div>
+              )}
+
+              <div style={{ width:38, height:38, borderRadius:10, margin:'0 auto 6px',
+                display:'flex', alignItems:'center', justifyContent:'center', background: iconBg }}>
+                <Icon name={state === 'done' ? 'check' : s.icon} size={19}
+                  color={iconCol} strokeWidth={state === 'done' ? 2.5 : 1.8} />
               </div>
-              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: state === 'done' ? '#16a34a' : state === 'active' ? C.blue : C.textMute, lineHeight: 1.3 }}>{s.label}</div>
+              <div style={{ fontSize:'0.67rem', fontWeight:600, color:labelCol, lineHeight:1.3 }}>{s.label}</div>
+              {state === 'parallel' && (
+                <div style={{ fontSize:'0.55rem', color:'#7c3aed', marginTop:2, fontWeight:500 }}>parallel</div>
+              )}
             </div>
           );
         })}
       </div>
       <div style={{ marginTop: 14, height: 5, background: C.border, borderRadius: 9999, overflow: 'hidden' }}>
-        <div className="pipeline-bar" style={{ height: '100%', borderRadius: 9999, background: 'linear-gradient(to right,#3b82f6,#8b5cf6)', width: `${done ? 100 : pct}%` }} />
+        <div className="pipeline-bar" style={{ height:'100%', borderRadius:9999,
+          background: parallelFiring
+            ? 'linear-gradient(to right,#3b82f6,#8b5cf6,#a78bfa)'
+            : 'linear-gradient(to right,#3b82f6,#8b5cf6)',
+          width:`${pct}%` }} />
       </div>
-      <div style={{ marginTop: 5, fontSize: '0.68rem', color: done ? C.green : C.textMute, display:'flex', alignItems:'center', gap:5 }}>
+      <div style={{ marginTop:5, fontSize:'0.68rem', color: done ? C.green : parallelFiring ? '#a78bfa' : C.textMute, display:'flex', alignItems:'center', gap:5 }}>
         {done && <Icon name="checkcircle" size={12} color={C.green} />}
-        {done ? 'All steps complete' : stepDetail || `Step ${currentStep + 1} of ${STEPS.length}`}
+        {parallelFiring && <Icon name="zap" size={11} color="#a78bfa" />}
+        {done ? 'All steps complete' : parallelFiring ? 'Agents 1–4 running simultaneously…' : stepDetail || `Step ${currentStep + 1} of ${STEPS.length}`}
       </div>
     </div>
   );
@@ -560,7 +609,7 @@ function App() {
     try {
       const res = await fetch(`${API}/api/export/worksheet`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: worksheet }),
+        body: JSON.stringify({ text: worksheet, filename: wsFilename }),
       });
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
@@ -574,7 +623,7 @@ function App() {
     try {
       const res = await fetch(`${API}/api/export/markscheme`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: markscheme }),
+        body: JSON.stringify({ text: markscheme, filename: msFilename }),
       });
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
@@ -600,7 +649,7 @@ function App() {
     try {
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, worksheet, markscheme }),
+        body: JSON.stringify({ message: text, worksheet, markscheme, history: chatMsgs }),
       });
       const data = await res.json();
       setChatMsgs(prev => [...prev, { role: 'assistant', text: data.reply }]);
@@ -708,7 +757,7 @@ function App() {
               : <><Icon name="sparkles" size={15} color="#fff" /> Run Enhancement Pipeline</>
             }
           </button>
-          <div style={{ fontSize: '0.66rem', color: C.textMute, textAlign: 'center', marginTop: 6 }}>8-step AI pipeline · ~30 seconds</div>
+          <div style={{ fontSize: '0.66rem', color: C.textMute, textAlign: 'center', marginTop: 6 }}>5-step pipeline · agents 1–4 run in parallel</div>
         </div>
       </aside>
 
