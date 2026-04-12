@@ -913,6 +913,65 @@ def build_markscheme_docx(markscheme_text: str) -> BytesIO:
 # ============================================================================
 
 
+def _count_agent_issues(r1: str, r2: str, r3: str, r4: str) -> dict:
+    """Parse agent JSON reports and count meaningful issues flagged."""
+    counts = {"command_word": 0, "mark_scheme": 0, "cognitive": 0, "coverage": 0, "total": 0}
+
+    # Agent 1 — command words / interrogative phrasing
+    try:
+        d = json.loads(r1)
+        for q in d.get("question_analysis", []):
+            status = q.get("alignment_status", "ok")
+            if status != "ok" or q.get("is_interrogative"):
+                counts["command_word"] += 1
+    except Exception:
+        pass
+
+    # Agent 2 — mark scheme structural violations
+    try:
+        d = json.loads(r2)
+        viol = d.get("summary", {}).get("rule_violations", {})
+        for k, v in viol.items():
+            if v and str(v).strip().lower() not in ("0", "false", "none", ""):
+                counts["mark_scheme"] += 1
+        for q in d.get("question_analysis", []):
+            if q.get("structure_alignment") == "mismatch":
+                counts["mark_scheme"] += 1
+    except Exception:
+        pass
+
+    # Agent 3 — cognitive balance / authenticity
+    try:
+        d = json.loads(r3)
+        for k, v in d.get("balance_flags", {}).items():
+            if k != "skew_description" and v:
+                counts["cognitive"] += 1
+        for q in d.get("question_analysis", []):
+            if q.get("flags") or not q.get("difficulty_appropriate", True):
+                counts["cognitive"] += 1
+        auth = d.get("authenticity_issues", {})
+        if not auth.get("difficulty_gradient_ok", True):
+            counts["cognitive"] += 1
+        if auth.get("mark_cognitive_mismatches"):
+            counts["cognitive"] += 1
+        if auth.get("ai_sounding_language_found"):
+            counts["cognitive"] += 1
+    except Exception:
+        pass
+
+    # Agent 4 — topic coverage / out-of-scope
+    try:
+        d = json.loads(r4)
+        for q in d.get("per_question", []):
+            if q.get("scope_status", "in_scope") != "in_scope":
+                counts["coverage"] += 1
+    except Exception:
+        pass
+
+    counts["total"] = counts["command_word"] + counts["mark_scheme"] + counts["cognitive"] + counts["coverage"]
+    return counts
+
+
 async def process_stream_generator(
     worksheet_bytes: bytes,
     markscheme_bytes: Optional[bytes],
@@ -991,8 +1050,11 @@ async def process_stream_generator(
     if revised_ms:
         improved_ms = revised_ms
 
+    # Tally issues found by the four agents
+    pipeline_stats = _count_agent_issues(r1, r2, r3, r4)
+
     # Final event with results
-    yield f'data: {json.dumps({"done": True, "worksheet": improved_ws, "markscheme": improved_ms})}\n\n'
+    yield f'data: {json.dumps({"done": True, "worksheet": improved_ws, "markscheme": improved_ms, "pipeline_stats": pipeline_stats})}\n\n'
 
 
 @app.post("/api/process")

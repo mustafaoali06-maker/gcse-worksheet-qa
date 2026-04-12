@@ -550,6 +550,7 @@ function App() {
   const [specImgFiles, setSpecImgFiles] = useState([]); // array of File objects
   const [ocrProgress, setOcrProgress] = useState(null); // null | {done, total}
   const [ocrError, setOcrError] = useState('');
+  const [specImgDragging, setSpecImgDragging] = useState(false);
 
   // Pipeline state
   const [running, setRunning]       = useState(false);
@@ -560,6 +561,7 @@ function App() {
   const [worksheet, setWorksheet]   = useState('');
   const [markscheme, setMarkscheme] = useState('');
   const [hasResults, setHasResults] = useState(false);
+  const [pipelineStats, setPipelineStats] = useState(null);
 
   // Tab & view state
   const [activeTab, setActiveTab]     = useState('worksheet');
@@ -593,7 +595,7 @@ function App() {
   const resetAll = () => {
     setWsFile(null); setMsFile(null); setSpecTxt(null); setSpecDocx(null); setPastedSpec('');
     setRunning(false); setCurrentStep(-1); setStepDetail('');
-    setWorksheet(''); setMarkscheme(''); setHasResults(false);
+    setWorksheet(''); setMarkscheme(''); setHasResults(false); setPipelineStats(null);
     setActiveTab('worksheet'); setPreviewWs(true); setPreviewMs(true);
     setWsTitle('');
     setWsDocBytes(null); setMsDocBytes(null); setGenWs(false); setGenMs(false);
@@ -667,6 +669,7 @@ function App() {
               setWorksheet(data.worksheet || '');
               setMarkscheme(data.markscheme || '');
               setHasResults(true);
+              if (data.pipeline_stats) setPipelineStats(data.pipeline_stats);
               setCurrentStep(STEPS.length);
               setStepDetail('');
               const base = wsTitle || (wsFile ? wsFile.name.replace(/\.docx$/i, '') : 'worksheet');
@@ -754,6 +757,41 @@ function App() {
     return Math.round(([...w1].filter(x => w2.has(x)).length / w1.size) * 100);
   })();
 
+  // ── Worksheet text stats ──────────────────────────────────────────────────
+  const wsStats = React.useMemo(() => {
+    if (!worksheet) return null;
+    // Total marks from "Total for question X is N marks" lines
+    let totalMarks = 0;
+    const marksPerQ = {};
+    for (const line of worksheet.split('\n')) {
+      const tm = line.match(/Total for question (\d+) is (\d+) marks/i);
+      if (tm) { marksPerQ[tm[1]] = parseInt(tm[2]); totalMarks += parseInt(tm[2]); }
+    }
+    // Question + sub-part count
+    const mainQs = new Set();
+    for (const line of worksheet.split('\n')) {
+      const m = line.match(/^(\d+)\s+\S/);
+      if (m && parseInt(m[1]) <= 50) mainQs.add(m[1]);
+    }
+    const subParts = (worksheet.match(/^\s*\([a-z]\)\s/gm) || []).length;
+    // Command word counts
+    const CMD = {
+      'Recall':    /\b(State|Give|Name|Identify|Define|List)\b/g,
+      'Describe':  /\bDescribe\b/g,
+      'Explain':   /\b(Explain|Justify)\b/g,
+      'Calculate': /\b(Calculate|Determine|Show that|Compute)\b/g,
+      'Apply':     /\b(Suggest|Evaluate|Compare|Predict|Outline|Assess)\b/g,
+    };
+    const CMD_COLOURS = { Recall:'#60a5fa', Describe:'#a78bfa', Explain:'#f472b6', Calculate:'#34d399', Apply:'#fb923c' };
+    const cmdCounts = {};
+    let cmdTotal = 0;
+    for (const [g, re] of Object.entries(CMD)) {
+      const n = (worksheet.match(re) || []).length;
+      cmdCounts[g] = n; cmdTotal += n;
+    }
+    return { totalMarks, marksPerQ, mainQCount: mainQs.size, subParts, cmdCounts, cmdTotal, CMD_COLOURS };
+  }, [worksheet]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
@@ -810,14 +848,23 @@ function App() {
           {/* Scan images from book */}
           <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or scan book / spec page photos</div>
           <div style={{
-            border: `1.5px dashed ${specImgFiles.length > 0 ? C.green : C.border}`,
+            border: `1.5px dashed ${specImgDragging ? C.blue : specImgFiles.length > 0 ? C.green : C.border}`,
             borderRadius: 8, padding: '10px 12px',
             cursor: ocrProgress ? 'default' : 'pointer',
-            background: specImgFiles.length > 0 ? 'rgba(34,197,94,0.06)' : C.surface3,
+            background: specImgDragging ? C.blueLt : specImgFiles.length > 0 ? 'rgba(34,197,94,0.06)' : C.surface3,
             display: 'flex', alignItems: 'center', gap: 10,
             transition: 'all 0.15s',
           }}
             onClick={() => { if (!ocrProgress) document.getElementById('spec-img-input').click(); }}
+            onDragOver={e => { e.preventDefault(); if (!ocrProgress) setSpecImgDragging(true); }}
+            onDragEnter={e => { e.preventDefault(); if (!ocrProgress) setSpecImgDragging(true); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setSpecImgDragging(false); }}
+            onDrop={e => {
+              e.preventDefault(); setSpecImgDragging(false);
+              if (ocrProgress) return;
+              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+              if (files.length > 0) { setSpecImgFiles(prev => [...prev, ...files]); setOcrError(''); runSpecOcr(files); }
+            }}
           >
             <input id="spec-img-input" type="file" accept="image/*" multiple style={{ display: 'none' }}
               onChange={e => {
@@ -855,7 +902,7 @@ function App() {
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
                   </svg>
-                  <span style={{ fontSize: 11.5, color: C.textMute }}>Select one or more photos of your CGP book / spec — text extracted automatically</span>
+                  <span style={{ fontSize: 11.5, color: specImgDragging ? C.blue : C.textMute }}>{specImgDragging ? 'Drop images to scan' : 'Click or drag photos of your CGP book / spec — text extracted automatically'}</span>
                 </>
             }
           </div>
@@ -998,21 +1045,98 @@ function App() {
           {hasResults && (
             <div>
 
-              {/* QA banner — shown on worksheet tab */}
-              {activeTab === 'worksheet' && qaOverlap !== null && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 14, margin: '16px 24px 0',
-                  background: qaOverlap >= 40 ? C.greenLt : 'rgba(248,113,113,0.1)',
-                  border: `1px solid ${qaOverlap >= 40 ? C.greenBrd : 'rgba(248,113,113,0.3)'}`,
-                  borderRadius: 10, padding: '12px 18px',
-                }} className="fade-in">
-                  <Icon name={qaOverlap >= 40 ? 'checkcircle' : 'x'} size={22} color={qaOverlap >= 40 ? C.green : C.red} />
-                  <div>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Keyword Alignment</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: qaOverlap >= 40 ? C.green : C.red }}>{qaOverlap}%</div>
+              {/* ── Stats row — always visible when results exist ── */}
+              {wsStats && (
+                <div className="fade-in" style={{ margin: '16px 24px 0', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                  {/* Total marks */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Total Marks</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: C.blue, lineHeight: 1 }}>{wsStats.totalMarks || '—'}</div>
                   </div>
-                  <div style={{ marginLeft: 'auto', fontSize: '0.8rem', color: C.textMute }}>
-                    {qaOverlap >= 40 ? 'Good alignment between worksheet and mark scheme' : 'Low overlap — check content alignment'}
+                  {/* Questions */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Questions</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: C.violet, lineHeight: 1 }}>{wsStats.mainQCount}</div>
+                    <div style={{ fontSize: '0.65rem', color: C.textMute, marginTop: 2 }}>{wsStats.subParts} sub-parts</div>
+                  </div>
+                  {/* Issues flagged */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Issues Fixed</div>
+                    {pipelineStats
+                      ? <>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: pipelineStats.total > 0 ? C.green : C.textMid, lineHeight: 1 }}>{pipelineStats.total}</div>
+                          <div style={{ fontSize: '0.63rem', color: C.textMute, marginTop: 2 }}>
+                            {[
+                              pipelineStats.command_word  > 0 && `${pipelineStats.command_word} cmd`,
+                              pipelineStats.mark_scheme   > 0 && `${pipelineStats.mark_scheme} ms`,
+                              pipelineStats.cognitive     > 0 && `${pipelineStats.cognitive} cog`,
+                              pipelineStats.coverage      > 0 && `${pipelineStats.coverage} scope`,
+                            ].filter(Boolean).join(' · ')}
+                          </div>
+                        </>
+                      : <div style={{ fontSize: '0.72rem', color: C.textMute, marginTop: 4 }}>Run pipeline to see</div>
+                    }
+                  </div>
+                  {/* Keyword alignment */}
+                  <div style={{
+                    background: qaOverlap === null ? C.surface : qaOverlap >= 40 ? C.greenLt : 'rgba(248,113,113,0.08)',
+                    border: `1px solid ${qaOverlap === null ? C.border : qaOverlap >= 40 ? C.greenBrd : 'rgba(248,113,113,0.3)'}`,
+                    borderRadius: 10, padding: '10px 14px',
+                  }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>WS ↔ MS Match</div>
+                    {qaOverlap !== null
+                      ? <>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: qaOverlap >= 40 ? C.green : C.red, lineHeight: 1 }}>{qaOverlap}%</div>
+                          <div style={{ fontSize: '0.63rem', color: C.textMute, marginTop: 2 }}>{qaOverlap >= 40 ? 'Good alignment' : 'Low overlap'}</div>
+                        </>
+                      : <div style={{ fontSize: '0.72rem', color: C.textMute, marginTop: 4 }}>—</div>
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* ── Command word breakdown + marks per question (worksheet tab) ── */}
+              {activeTab === 'worksheet' && wsStats && wsStats.cmdTotal > 0 && (
+                <div className="fade-in" style={{ margin: '10px 24px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {/* Command word breakdown */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Command Word Balance</div>
+                    {Object.entries(wsStats.cmdCounts).filter(([,n]) => n > 0).map(([g, n]) => {
+                      const pct = Math.round((n / wsStats.cmdTotal) * 100);
+                      const col = wsStats.CMD_COLOURS[g];
+                      return (
+                        <div key={g} style={{ marginBottom: 5 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', marginBottom: 2 }}>
+                            <span style={{ color: C.textMid, fontWeight: 500 }}>{g}</span>
+                            <span style={{ color: C.textMute }}>{n} &nbsp;{pct}%</span>
+                          </div>
+                          <div style={{ height: 5, background: C.surface3, borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: col, borderRadius: 3, transition: 'width 0.6s ease' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Marks per question */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Marks per Question</div>
+                    {Object.entries(wsStats.marksPerQ).length > 0
+                      ? (() => {
+                          const max = Math.max(...Object.values(wsStats.marksPerQ));
+                          return Object.entries(wsStats.marksPerQ).map(([qn, m]) => (
+                            <div key={qn} style={{ marginBottom: 5 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', marginBottom: 2 }}>
+                                <span style={{ color: C.textMid, fontWeight: 500 }}>Q{qn}</span>
+                                <span style={{ color: C.textMute }}>{m} marks</span>
+                              </div>
+                              <div style={{ height: 5, background: C.surface3, borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.round((m/max)*100)}%`, background: C.blue, borderRadius: 3, transition: 'width 0.6s ease' }} />
+                              </div>
+                            </div>
+                          ));
+                        })()
+                      : <div style={{ fontSize: '0.72rem', color: C.textMute }}>No question totals detected yet</div>
+                    }
                   </div>
                 </div>
               )}
