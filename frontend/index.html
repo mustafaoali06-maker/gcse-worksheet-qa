@@ -615,21 +615,23 @@ function App() {
     setMsDocBytes(null);
     setChatMsgs([]); setChatInput('');
 
-    // ── OCR any queued spec images before starting the pipeline ─────────────
+    // ── OCR any queued spec images — all in parallel before the pipeline ────
     let effectiveSpec = pastedSpec;
     if (specImgFiles.length > 0) {
-      const imgResults = [];
-      for (let i = 0; i < specImgFiles.length; i++) {
-        setStepDetail(`Scanning spec image ${i + 1} of ${specImgFiles.length}…`);
-        try {
-          const ocrForm = new FormData();
-          ocrForm.append('file', specImgFiles[i]);
-          const ocrRes = await fetch(`${API}/api/spec-ocr`, { method: 'POST', body: ocrForm });
-          if (!ocrRes.ok) throw new Error(`${ocrRes.status}`);
-          const ocrData = await ocrRes.json();
-          if (ocrData.text) imgResults.push(ocrData.text);
-        } catch (_) { /* skip individual failed images silently */ }
-      }
+      setStepDetail(`Scanning ${specImgFiles.length} spec image${specImgFiles.length > 1 ? 's' : ''} in parallel…`);
+      const ocrResults = await Promise.all(
+        specImgFiles.map(async (imgFile) => {
+          try {
+            const ocrForm = new FormData();
+            ocrForm.append('file', imgFile);
+            const ocrRes = await fetch(`${API}/api/spec-ocr`, { method: 'POST', body: ocrForm });
+            if (!ocrRes.ok) throw new Error(`${ocrRes.status}`);
+            const ocrData = await ocrRes.json();
+            return ocrData.text || null;
+          } catch (_) { return null; }
+        })
+      );
+      const imgResults = ocrResults.filter(Boolean); // drop any that failed
       if (imgResults.length > 0) {
         const imgText = imgResults.join('\n\n');
         effectiveSpec = effectiveSpec ? effectiveSpec + '\n\n' + imgText : imgText;
