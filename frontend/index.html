@@ -155,35 +155,74 @@ function Icon({ name, size = 18, color = 'currentColor', strokeWidth = 2 }) {
 }
 
 // ── UploadZone ────────────────────────────────────────────────────────────
-function UploadZone({ icon, label, hint, required, file, onClear }) {
+function UploadZone({ icon, label, hint, accept, required, file, onFile, onClear }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
   const hasFile = !!file;
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    if (hasFile) return;
+    const f = e.dataTransfer.files[0];
+    if (f) onFile(f);
+  };
+  const handleChange = (e) => {
+    const f = e.target.files[0];
+    if (f) onFile(f);
+    e.target.value = '';           // allow re-selecting same file
+  };
+  const handleDragOver  = (e) => { e.preventDefault(); if (!hasFile) setDragging(true);  };
+  const handleDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); };
+
+  const borderCol = hasFile ? C.greenBrd : dragging ? C.blue : (required ? 'rgba(59,130,246,0.3)' : C.border);
+  const bgCol     = hasFile ? C.greenLt  : dragging ? C.blueLt : (required ? 'rgba(59,130,246,0.06)' : C.surface2);
+
   return (
-    <div style={{
-      background: hasFile ? C.greenLt : (required ? 'rgba(59,130,246,0.06)' : C.surface2),
-      border: `1.5px solid ${hasFile ? C.greenBrd : (required ? 'rgba(59,130,246,0.3)' : C.border)}`,
-      borderRadius: 10, padding: '8px 10px', marginBottom: 6,
-      display: 'flex', alignItems: 'center', gap: 9, transition: 'all 0.2s',
-    }}>
+    <div
+      onClick={() => !hasFile && inputRef.current.click()}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        background: bgCol,
+        border: `1.5px ${dragging ? 'dashed' : 'solid'} ${borderCol}`,
+        borderRadius: 10, padding: '8px 10px', marginBottom: 6,
+        display: 'flex', alignItems: 'center', gap: 9,
+        cursor: hasFile ? 'default' : 'pointer',
+        transition: 'all 0.15s',
+      }}>
+      <input ref={inputRef} type="file" accept={accept} style={{ display: 'none' }} onChange={handleChange} />
       <div style={{
         width: 30, height: 30, borderRadius: 7,
-        background: hasFile ? C.greenLt : (required ? 'rgba(59,130,246,0.2)' : C.surface3),
+        background: hasFile ? C.greenLt : dragging ? 'rgba(59,130,246,0.2)' : (required ? 'rgba(59,130,246,0.2)' : C.surface3),
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>{hasFile
-        ? <Icon name="check" size={16} color={C.green} strokeWidth={2.5} />
-        : <Icon name={icon} size={16} color={required ? C.blue : C.textMid} />
-      }</div>
+      }}>
+        {hasFile
+          ? <Icon name="check" size={16} color={C.green} strokeWidth={2.5} />
+          : dragging
+          ? <Icon name="upload" size={16} color={C.blue} />
+          : <Icon name={icon} size={16} color={required ? C.blue : C.textMid} />
+        }
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: hasFile ? C.green : C.text }}>{label}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: hasFile ? C.green : dragging ? C.blue : C.text }}>{label}</span>
           {hasFile
             ? <span style={{ fontSize: 9, color: C.green, background: C.greenLt, border: `1px solid ${C.greenBrd}`, borderRadius: 20, padding: '1px 7px', marginLeft: 'auto' }}>Uploaded</span>
             : <Badge color={required ? C.blue : C.textMute} bg={required ? C.blueLt : C.surface3}>{required ? 'Required' : 'Optional'}</Badge>
           }
           {hasFile && (
-            <button onClick={onClear} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.red, cursor: 'pointer', padding: '0 2px', display:'flex', alignItems:'center' }}><Icon name="x" size={13} color={C.red} strokeWidth={2.5} /></button>
+            <button onClick={(e) => { e.stopPropagation(); onClear(); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.red, cursor: 'pointer', padding: '0 2px', display:'flex', alignItems:'center' }}>
+              <Icon name="x" size={13} color={C.red} strokeWidth={2.5} />
+            </button>
           )}
         </div>
-        <div style={{ fontSize: 10, color: C.textMute }}>{hasFile ? file.name : hint}</div>
+        <div style={{ fontSize: 10, color: dragging ? C.blue : C.textMute }}>
+          {hasFile ? file.name : dragging ? 'Drop to upload' : hint}
+        </div>
       </div>
     </div>
   );
@@ -521,21 +560,7 @@ function App() {
   // Error
   const [error, setError] = useState('');
 
-  const fileRef = (setter) => (e) => setter(e.target.files[0] || null);
-  const wsFileRef = (e) => {
-    const f = e.target.files[0] || null;
-    setWsFile(f);
-    if (f) setWsTitle(f.name.replace(/\.docx$/i, '').replace(/[_-]+/g, ' ').trim());
-  };
-  const msFileRef = (e) => {
-    const f = e.target.files[0] || null;
-    setMsFile(f);
-  };
-  const wsInputRef   = useRef();
-  const msInputRef   = useRef();
-  const specTxtRef   = useRef();
-  const specDocxRef  = useRef();
-  const chatEndRef   = useRef();
+  const chatEndRef = useRef();
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
 
@@ -550,11 +575,7 @@ function App() {
     setWsFilename('worksheet.docx'); setMsFilename('markscheme.docx');
     setChatMsgs([]); setChatInput(''); setChatLoading(false);
     setError('');
-    // Also reset the file inputs so the same file can be re-uploaded
-    if (wsInputRef.current)  wsInputRef.current.value  = '';
-    if (msInputRef.current)  msInputRef.current.value  = '';
-    if (specTxtRef.current)  specTxtRef.current.value  = '';
-    if (specDocxRef.current) specDocxRef.current.value = '';
+    // UploadZone components own their own inputs and clear them internally
   };
 
   // ── Run pipeline ─────────────────────────────────────────────────────────
@@ -710,16 +731,16 @@ function App() {
           <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '16px 0 7px' }}>Documents</div>
 
           {/* Worksheet upload */}
-          <div onClick={() => !wsFile && wsInputRef.current.click()} style={{ cursor: wsFile ? 'default' : 'pointer' }}>
-            <UploadZone icon="doc" label="Worksheet" hint=".docx · click to upload" required file={wsFile} onClear={() => setWsFile(null)} />
-          </div>
-          <input ref={wsInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={wsFileRef} />
+          <UploadZone icon="doc" label="Worksheet" hint=".docx — click or drag" accept=".docx" required
+            file={wsFile}
+            onFile={(f) => { setWsFile(f); setWsTitle(f.name.replace(/\.docx$/i,'').replace(/[_-]+/g,' ').trim()); }}
+            onClear={() => setWsFile(null)} />
 
           {/* Mark scheme upload */}
-          <div onClick={() => !msFile && msInputRef.current.click()} style={{ cursor: msFile ? 'default' : 'pointer' }}>
-            <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx · click to upload" required={false} file={msFile} onClear={() => setMsFile(null)} />
-          </div>
-          <input ref={msInputRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={msFileRef} />
+          <UploadZone icon="clipboard" label="Mark Scheme" hint=".docx — click or drag" accept=".docx" required={false}
+            file={msFile}
+            onFile={(f) => setMsFile(f)}
+            onClear={() => setMsFile(null)} />
 
           <Divider />
 
@@ -727,15 +748,15 @@ function App() {
           <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.textMute, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 7 }}>
             Specification <span style={{ fontWeight: 400, textTransform: 'none' }}>— optional</span>
           </div>
-          <div onClick={() => !specTxtFile && specTxtRef.current.click()} style={{ cursor: specTxtFile ? 'default' : 'pointer' }}>
-            <UploadZone icon="alignleft" label="Spec (.txt)" hint=".txt · click to upload" required={false} file={specTxtFile} onClear={() => setSpecTxt(null)} />
-          </div>
-          <input ref={specTxtRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={fileRef(setSpecTxt)} />
+          <UploadZone icon="alignleft" label="Spec (.txt)" hint=".txt — click or drag" accept=".txt" required={false}
+            file={specTxtFile}
+            onFile={(f) => setSpecTxt(f)}
+            onClear={() => setSpecTxt(null)} />
 
-          <div onClick={() => !specDocxFile && specDocxRef.current.click()} style={{ cursor: specDocxFile ? 'default' : 'pointer' }}>
-            <UploadZone icon="alignleft" label="Spec (.docx)" hint=".docx · click to upload" required={false} file={specDocxFile} onClear={() => setSpecDocx(null)} />
-          </div>
-          <input ref={specDocxRef} type="file" accept=".docx" style={{ display: 'none' }} onChange={fileRef(setSpecDocx)} />
+          <UploadZone icon="alignleft" label="Spec (.docx)" hint=".docx — click or drag" accept=".docx" required={false}
+            file={specDocxFile}
+            onFile={(f) => setSpecDocx(f)}
+            onClear={() => setSpecDocx(null)} />
 
           <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or paste specification text</div>
           <textarea

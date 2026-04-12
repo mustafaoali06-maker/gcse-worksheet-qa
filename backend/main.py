@@ -287,11 +287,23 @@ COMMAND WORD RULES (CRITICAL):
      - "Which type of wave is used in optical fibres?" → "Identify the type of wave used in optical fibres."
      - "Why does the wave slow down?" → "Explain why the wave slows down."
      - "How does a concave mirror improve the beam?" → "Explain how a concave mirror improves the beam."
-10. Context / scenario sentences (e.g. "A student connects a circuit. The reading is 3 A.") are ALLOWED
-    and should come BEFORE the command-word instruction on a separate line. Context is NOT the instruction.
-    Example format:
-        Radio waves are used for broadcasting.
-        Explain why radio waves can be received over large distances.   (2)
+10. LINE SEPARATION — CRITICAL: Every standalone statement or sentence that makes sense on its own MUST
+    be on its OWN line. This applies to EVERY part of the worksheet without exception.
+    Specifically:
+    - Context / scenario sentences MUST be on a line of their own, NEVER merged onto the same line as the
+      command-word instruction that follows them.
+    - Each command-word instruction MUST be on its own line.
+    - NEVER write context and instruction as a single run-on line.
+
+    CORRECT (context and command each on their own line):
+        (b)  Radio waves are used for broadcasting.
+             Explain why radio waves can be received over large distances.   (2)
+
+    INCORRECT (merged onto one line — NEVER do this):
+        (b)  Radio waves are used for broadcasting. Explain why radio waves can be received over large distances.   (2)
+
+    This rule applies to EVERY question throughout the entire worksheet, not just some of them.
+    Apply it consistently to questions 1 through the last question.
 
 FORMATTING RULES:
 11. Remove ALL topic headers (e.g. "Work and Energy Transfers", "Forces", "Section A").
@@ -408,21 +420,39 @@ Question mapping and numbering:
 
 async def improve_markscheme(worksheet_text: str, existing_ms: str) -> str:
     """Improve and validate an uploaded mark scheme against the worksheet."""
-    prompt = f"""You are reviewing and improving an uploaded GCSE mark scheme against its worksheet.
+    prompt = """You are reviewing and improving an uploaded GCSE mark scheme against its worksheet.
 
-RULES:
+CONTENT RULES:
 1. Keep all correct marking points — do NOT discard good content.
-2. Fix any marking points that are vague (e.g. "correct answer (1)") — replace with the actual answer.
-3. For CALCULATION questions ensure: equation shown, numerical substitution, answer with units.
-4. Ensure every question and sub-part in the worksheet has a corresponding mark scheme entry.
-5. Add any missing questions or sub-parts.
-6. Fix mark totals if they are wrong.
-7. Use "(Total for question X is Y marks)" format — "is" not "=".
-8. End with "Total marks for question paper: Z".
-9. Use (1) for each individual mark — never (2) for a single point.
-10. Remove ALL markdown symbols (#, *, etc.).
+2. Fix any vague marking points (e.g. "correct answer (1)", "working step (1)") — replace with the actual answer, equation, or value.
+3. For CALCULATION questions ensure:
+   - Show the actual equation, numerical substitution, and final answer with units.
+   - Do NOT award a mark purely for writing an equation — marks are for substitution and correct answer.
+   - Example: "a = (v - u) / t = (0 - 20) / 5 = -4 m/s² (1)(1)"
+4. For NON-CALCULATION questions give clear, specific marking points.
+   - When 3+ possible answers exist, use "Any [one/two/three] from:" followed by bullet points.
+   - Use "OR" only when exactly two alternatives exist on the same line.
+5. Every individual mark must use (1). Never use (2) or (3) for a single marking point.
+6. Every marking point must be a SHORT, concise phrase — not a full paragraph.
 
-Return the improved mark scheme only. No commentary.
+STRUCTURE RULES:
+7. Ensure every question and sub-part in the worksheet has a corresponding mark scheme entry. Add any missing ones.
+8. Do NOT invent question numbers or sub-parts that don't exist in the worksheet.
+9. Only the FIRST letter of each marking sentence should be capitalised.
+10. Sentences longer than 3-4 words must end with a full stop before the (1).
+11. Any accept/note guidance should be on its own line: [NOTE]: accept X instead of Y
+
+FORMATTING RULES:
+12. Bold question numbers: "1", "2" etc. (just the number).
+13. Sub-part labels in brackets: (a), (b), (c), (i), (ii).
+14. No space between marking points WITHIN the same question part.
+15. One blank line between DIFFERENT sub-parts (a) → (b) → (c).
+16. One blank line between the last mark of a question and the Total line.
+17. Include "(Total for question X is Y marks)" after each main question — use "is" NOT "=".
+18. At the very end, on its own line: "Total marks for question paper: Z"
+19. Remove ALL markdown symbols (#, *, etc.).
+
+Return the improved mark scheme only. No commentary or explanations.
 """
     response = await async_client.chat.completions.create(
         model="gpt-4o-mini",
@@ -869,14 +899,25 @@ async def process_stream_generator(
     yield f'data: {json.dumps({"step": step, "label": "Agents 1–4", "detail": "Running all checks in parallel"})}\n\n'
     combined = f"WORKSHEET:\n{improved_ws}\n\nMARK SCHEME:\n{improved_ms}"
     combined_input = f"WORKSHEET AND MARK SCHEME:\n{combined}"
-    coverage_input = f"{combined_input}\n\nINTENDED SCOPE:\n{spec_text}"
 
-    r1, r2, r3, r4 = await asyncio.gather(
-        run_agent(AGENT_1_PROMPT, combined_input),
-        run_agent(AGENT_2_PROMPT, combined_input),
-        run_agent(AGENT_3_PROMPT, combined_input),
-        run_agent(AGENT_4_PROMPT, coverage_input),
-    )
+    if spec_text.strip():
+        # Spec provided — run all 4 agents including topic coverage
+        coverage_input = f"{combined_input}\n\nINTENDED SCOPE:\n{spec_text}"
+        r1, r2, r3, r4 = await asyncio.gather(
+            run_agent(AGENT_1_PROMPT, combined_input),
+            run_agent(AGENT_2_PROMPT, combined_input),
+            run_agent(AGENT_3_PROMPT, combined_input),
+            run_agent(AGENT_4_PROMPT, coverage_input),
+        )
+    else:
+        # No spec — skip Agent 4 (topic coverage is meaningless without a spec)
+        r1, r2, r3 = await asyncio.gather(
+            run_agent(AGENT_1_PROMPT, combined_input),
+            run_agent(AGENT_2_PROMPT, combined_input),
+            run_agent(AGENT_3_PROMPT, combined_input),
+        )
+        r4 = "No specification provided — topic coverage evaluation skipped."
+
     step += 4  # accounts for steps 3, 4, 5, 6
 
     # ── Step 7: Agent 5 — final intelligent revision (gpt-4o) ─────────────────
