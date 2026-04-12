@@ -1085,76 +1085,84 @@ async def process_stream_generator(
       2 — Build/improve mark scheme  (gpt-4o-mini)
       3 — Agents 1-4 run IN PARALLEL  (gpt-4o-mini × 4 concurrent)
       4 — Agent 5 final revision  (gpt-4o — higher quality for the critical rewrite)
+
+    Any unhandled exception yields an error event so the frontend can surface a
+    message rather than leaving the progress spinner running indefinitely.
     """
-    step = 0
+    try:
+        step = 0
 
-    # ── Step 0: Read files ────────────────────────────────────────────────────
-    yield f'data: {json.dumps({"step": step, "label": "Reading files", "detail": "Parsing documents"})}\n\n'
-    worksheet_text = extract_docx(worksheet_bytes)
-    existing_ms_text = extract_docx(markscheme_bytes) if markscheme_bytes else ""
-    step += 1
+        # ── Step 0: Read files ────────────────────────────────────────────────────
+        yield f'data: {json.dumps({"step": step, "label": "Reading files", "detail": "Parsing documents"})}\n\n'
+        worksheet_text = extract_docx(worksheet_bytes)
+        existing_ms_text = extract_docx(markscheme_bytes) if markscheme_bytes else ""
+        step += 1
 
-    # ── Step 1: Improve worksheet ─────────────────────────────────────────────
-    yield f'data: {json.dumps({"step": step, "label": "Enhancing worksheet", "detail": "Improving quality"})}\n\n'
-    improved_ws = await improve_worksheet(worksheet_text, spec_text=spec_text)
-    step += 1
+        # ── Step 1: Improve worksheet ─────────────────────────────────────────────
+        yield f'data: {json.dumps({"step": step, "label": "Enhancing worksheet", "detail": "Improving quality"})}\n\n'
+        improved_ws = await improve_worksheet(worksheet_text, spec_text=spec_text)
+        step += 1
 
-    # ── Step 2: Build / improve mark scheme ───────────────────────────────────
-    if existing_ms_text.strip():
-        # Teacher uploaded their own mark scheme — improve it rather than discard it
-        yield f'data: {json.dumps({"step": step, "label": "Improving mark scheme", "detail": "Polishing uploaded mark scheme"})}\n\n'
-        improved_ms = await improve_markscheme(improved_ws, existing_ms_text, spec_text=spec_text)
-    else:
-        yield f'data: {json.dumps({"step": step, "label": "Generating mark scheme", "detail": "Creating marking points"})}\n\n'
-        improved_ms = await generate_markscheme(improved_ws, spec_text=spec_text)
-    step += 1
+        # ── Step 2: Build / improve mark scheme ───────────────────────────────────
+        if existing_ms_text.strip():
+            # Teacher uploaded their own mark scheme — improve it rather than discard it
+            yield f'data: {json.dumps({"step": step, "label": "Improving mark scheme", "detail": "Polishing uploaded mark scheme"})}\n\n'
+            improved_ms = await improve_markscheme(improved_ws, existing_ms_text, spec_text=spec_text)
+        else:
+            yield f'data: {json.dumps({"step": step, "label": "Generating mark scheme", "detail": "Creating marking points"})}\n\n'
+            improved_ms = await generate_markscheme(improved_ws, spec_text=spec_text)
+        step += 1
 
-    # ── Steps 3-6: Agents 1-4 run IN PARALLEL ────────────────────────────────
-    yield f'data: {json.dumps({"step": step, "label": "Agents 1–4", "detail": "Running all checks in parallel"})}\n\n'
-    combined = f"WORKSHEET:\n{improved_ws}\n\nMARK SCHEME:\n{improved_ms}"
-    combined_input = f"WORKSHEET AND MARK SCHEME:\n{combined}"
+        # ── Steps 3-6: Agents 1-4 run IN PARALLEL ────────────────────────────────
+        yield f'data: {json.dumps({"step": step, "label": "Agents 1–4", "detail": "Running all checks in parallel"})}\n\n'
+        combined = f"WORKSHEET:\n{improved_ws}\n\nMARK SCHEME:\n{improved_ms}"
+        combined_input = f"WORKSHEET AND MARK SCHEME:\n{combined}"
 
-    if spec_text.strip():
-        # Spec provided — run all 4 agents including topic coverage
-        coverage_input = f"{combined_input}\n\nINTENDED SCOPE:\n{spec_text}"
-        r1, r2, r3, r4 = await asyncio.gather(
-            run_agent(AGENT_1_PROMPT, combined_input),
-            run_agent(AGENT_2_PROMPT, combined_input),
-            run_agent(AGENT_3_PROMPT, combined_input),
-            run_agent(AGENT_4_PROMPT, coverage_input),
+        if spec_text.strip():
+            # Spec provided — run all 4 agents including topic coverage
+            coverage_input = f"{combined_input}\n\nINTENDED SCOPE:\n{spec_text}"
+            r1, r2, r3, r4 = await asyncio.gather(
+                run_agent(AGENT_1_PROMPT, combined_input),
+                run_agent(AGENT_2_PROMPT, combined_input),
+                run_agent(AGENT_3_PROMPT, combined_input),
+                run_agent(AGENT_4_PROMPT, coverage_input),
+            )
+        else:
+            # No spec — skip Agent 4 (topic coverage is meaningless without a spec)
+            r1, r2, r3 = await asyncio.gather(
+                run_agent(AGENT_1_PROMPT, combined_input),
+                run_agent(AGENT_2_PROMPT, combined_input),
+                run_agent(AGENT_3_PROMPT, combined_input),
+            )
+            r4 = "No specification provided — topic coverage evaluation skipped."
+
+        step += 4  # accounts for steps 3, 4, 5, 6
+
+        # ── Step 7: Agent 5 — final intelligent revision (gpt-4o) ─────────────────
+        yield f'data: {json.dumps({"step": step, "label": "Agent 5", "detail": "Finalising revision"})}\n\n'
+        agent5_input = (
+            f"ORIGINAL WORKSHEET:\n{improved_ws}\n\nORIGINAL MARK SCHEME:\n{improved_ms}\n\n"
+            f"INTENDED SCOPE:\n{spec_text}\n\n"
+            f"AGENT 1 REPORT:\n{r1}\n\nAGENT 2 REPORT:\n{r2}\n\n"
+            f"AGENT 3 REPORT:\n{r3}\n\nAGENT 4 REPORT:\n{r4}"
         )
-    else:
-        # No spec — skip Agent 4 (topic coverage is meaningless without a spec)
-        r1, r2, r3 = await asyncio.gather(
-            run_agent(AGENT_1_PROMPT, combined_input),
-            run_agent(AGENT_2_PROMPT, combined_input),
-            run_agent(AGENT_3_PROMPT, combined_input),
-        )
-        r4 = "No specification provided — topic coverage evaluation skipped."
+        # gpt-4o for Agent 5 — the critical rewrite step that synthesises all reports
+        final_text = await run_agent(AGENT_5_PROMPT, agent5_input, model="gpt-4o")
+        revised_ws, revised_ms = parse_revised_output(final_text)
+        if revised_ws:
+            improved_ws = revised_ws
+        if revised_ms:
+            improved_ms = revised_ms
 
-    step += 4  # accounts for steps 3, 4, 5, 6
+        # Tally issues found by the four agents
+        pipeline_stats = _count_agent_issues(r1, r2, r3, r4)
 
-    # ── Step 7: Agent 5 — final intelligent revision (gpt-4o) ─────────────────
-    yield f'data: {json.dumps({"step": step, "label": "Agent 5", "detail": "Finalising revision"})}\n\n'
-    agent5_input = (
-        f"ORIGINAL WORKSHEET:\n{improved_ws}\n\nORIGINAL MARK SCHEME:\n{improved_ms}\n\n"
-        f"INTENDED SCOPE:\n{spec_text}\n\n"
-        f"AGENT 1 REPORT:\n{r1}\n\nAGENT 2 REPORT:\n{r2}\n\n"
-        f"AGENT 3 REPORT:\n{r3}\n\nAGENT 4 REPORT:\n{r4}"
-    )
-    # gpt-4o for Agent 5 — the critical rewrite step that synthesises all reports
-    final_text = await run_agent(AGENT_5_PROMPT, agent5_input, model="gpt-4o")
-    revised_ws, revised_ms = parse_revised_output(final_text)
-    if revised_ws:
-        improved_ws = revised_ws
-    if revised_ms:
-        improved_ms = revised_ms
+        # Final event with results
+        yield f'data: {json.dumps({"done": True, "worksheet": improved_ws, "markscheme": improved_ms, "pipeline_stats": pipeline_stats})}\n\n'
 
-    # Tally issues found by the four agents
-    pipeline_stats = _count_agent_issues(r1, r2, r3, r4)
-
-    # Final event with results
-    yield f'data: {json.dumps({"done": True, "worksheet": improved_ws, "markscheme": improved_ms, "pipeline_stats": pipeline_stats})}\n\n'
+    except Exception as exc:
+        # Surface the error to the frontend instead of dying silently
+        yield f'data: {json.dumps({"error": True, "message": str(exc)})}\n\n'
 
 
 @app.post("/api/process")
