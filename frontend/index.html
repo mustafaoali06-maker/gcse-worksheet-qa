@@ -547,9 +547,7 @@ function App() {
   const [specTxtFile, setSpecTxt] = useState(null);
   const [specDocxFile, setSpecDocx] = useState(null);
   const [pastedSpec, setPastedSpec] = useState('');
-  const [specImgFiles, setSpecImgFiles] = useState([]); // array of File objects
-  const [ocrProgress, setOcrProgress] = useState(null); // null | {done, total}
-  const [ocrError, setOcrError] = useState('');
+  const [specImgFiles, setSpecImgFiles] = useState([]); // array of File objects — OCR'd at pipeline start
   const [specImgDragging, setSpecImgDragging] = useState(false);
 
   // Pipeline state
@@ -606,38 +604,6 @@ function App() {
   };
 
   // ── Spec image OCR (supports multiple images) ────────────────────────────
-  const runSpecOcr = async (files) => {
-    if (!files || files.length === 0) return;
-    setOcrError('');
-    setOcrProgress({ done: 0, total: files.length });
-    const results = [];
-    const failures = [];
-    for (let i = 0; i < files.length; i++) {
-      try {
-        const form = new FormData();
-        form.append('file', files[i]);
-        const res = await fetch(`${API}/api/spec-ocr`, { method: 'POST', body: form });
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const data = await res.json();
-        results.push(data.text);
-      } catch (e) {
-        failures.push(files[i].name);
-      }
-      setOcrProgress({ done: i + 1, total: files.length });
-    }
-    setOcrProgress(null);
-    if (results.length === 0) {
-      // Every image failed — don't pollute the spec field, just show an error
-      setOcrError(`Could not read ${failures.length === 1 ? failures[0] : `any of the ${failures.length} images`}. Check your connection and try again.`);
-      return;
-    }
-    if (failures.length > 0) {
-      setOcrError(`${failures.length} image${failures.length > 1 ? 's' : ''} could not be read: ${failures.join(', ')}`);
-    }
-    const combined = results.join('\n\n');
-    setPastedSpec(prev => prev ? prev + '\n\n' + combined : combined);
-  };
-
   // ── Run pipeline ─────────────────────────────────────────────────────────
   const runPipeline = async () => {
     if (!wsFile) { setError('Please upload a Worksheet .docx file first.'); return; }
@@ -649,12 +615,40 @@ function App() {
     setMsDocBytes(null);
     setChatMsgs([]); setChatInput('');
 
+    // ── OCR any queued spec images before starting the pipeline ─────────────
+    let effectiveSpec = pastedSpec;
+    if (specImgFiles.length > 0) {
+      const imgResults = [];
+      for (let i = 0; i < specImgFiles.length; i++) {
+        setStepDetail(`Scanning spec image ${i + 1} of ${specImgFiles.length}…`);
+        try {
+          const ocrForm = new FormData();
+          ocrForm.append('file', specImgFiles[i]);
+          const ocrRes = await fetch(`${API}/api/spec-ocr`, { method: 'POST', body: ocrForm });
+          if (!ocrRes.ok) throw new Error(`${ocrRes.status}`);
+          const ocrData = await ocrRes.json();
+          if (ocrData.text) imgResults.push(ocrData.text);
+        } catch (_) { /* skip individual failed images silently */ }
+      }
+      if (imgResults.length > 0) {
+        const imgText = imgResults.join('\n\n');
+        effectiveSpec = effectiveSpec ? effectiveSpec + '\n\n' + imgText : imgText;
+      } else if (!pastedSpec.trim()) {
+        // Every image failed and no pasted spec either — abort
+        setError('Could not read any of the spec images. Check your connection and try again.');
+        setRunning(false);
+        setStepDetail('');
+        return;
+      }
+      setStepDetail('');
+    }
+
     const form = new FormData();
     form.append('worksheet', wsFile);
-    if (msFile)       form.append('markscheme', msFile);
-    if (specTxtFile)  form.append('spec_txt', specTxtFile);
-    if (specDocxFile) form.append('spec_docx', specDocxFile);
-    if (pastedSpec)   form.append('pasted_spec', pastedSpec);
+    if (msFile)          form.append('markscheme', msFile);
+    if (specTxtFile)     form.append('spec_txt', specTxtFile);
+    if (specDocxFile)    form.append('spec_docx', specDocxFile);
+    if (effectiveSpec)   form.append('pasted_spec', effectiveSpec);
 
     try {
       const res = await fetch(`${API}/api/process`, { method: 'POST', body: form });
@@ -847,51 +841,36 @@ function App() {
           <div style={{
             border: `1.5px dashed ${specImgDragging ? C.blue : specImgFiles.length > 0 ? C.green : C.border}`,
             borderRadius: 8, padding: '10px 12px',
-            cursor: ocrProgress ? 'default' : 'pointer',
+            cursor: running ? 'default' : 'pointer',
             background: specImgDragging ? C.blueLt : specImgFiles.length > 0 ? 'rgba(34,197,94,0.06)' : C.surface3,
             display: 'flex', alignItems: 'center', gap: 10,
             transition: 'all 0.15s',
           }}
-            onClick={() => { if (!ocrProgress) document.getElementById('spec-img-input').click(); }}
-            onDragOver={e => { e.preventDefault(); if (!ocrProgress) setSpecImgDragging(true); }}
-            onDragEnter={e => { e.preventDefault(); if (!ocrProgress) setSpecImgDragging(true); }}
+            onClick={() => { if (!running) document.getElementById('spec-img-input').click(); }}
+            onDragOver={e => { e.preventDefault(); if (!running) setSpecImgDragging(true); }}
+            onDragEnter={e => { e.preventDefault(); if (!running) setSpecImgDragging(true); }}
             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setSpecImgDragging(false); }}
             onDrop={e => {
               e.preventDefault(); setSpecImgDragging(false);
-              if (ocrProgress) return;
+              if (running) return;
               const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-              if (files.length > 0) { setSpecImgFiles(prev => [...prev, ...files]); setOcrError(''); runSpecOcr(files); }
+              if (files.length > 0) setSpecImgFiles(prev => [...prev, ...files]);
             }}
           >
             <input id="spec-img-input" type="file" accept="image/*" multiple style={{ display: 'none' }}
               onChange={e => {
                 const files = Array.from(e.target.files);
-                if (files.length > 0) {
-                  setSpecImgFiles(prev => [...prev, ...files]);
-                  setOcrError('');
-                  runSpecOcr(files);
-                }
+                if (files.length > 0) setSpecImgFiles(prev => [...prev, ...files]);
                 e.target.value = '';
               }}
             />
-            {ocrProgress
-              ? <>
-                  <Spinner size={14} />
-                  <span style={{ fontSize: 11.5, color: C.textMid }}>
-                    Reading image {ocrProgress.done} of {ocrProgress.total}…
-                  </span>
-                  {/* progress bar */}
-                  <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: C.blue, borderRadius: 2, width: `${Math.round((ocrProgress.done / ocrProgress.total) * 100)}%`, transition: 'width 0.3s' }} />
-                  </div>
-                </>
-              : specImgFiles.length > 0
+            {specImgFiles.length > 0
               ? <>
                   <Icon name="checkcircle" size={15} color={C.green} />
                   <span style={{ fontSize: 11.5, color: C.text, flex: 1 }}>
-                    {specImgFiles.length} image{specImgFiles.length > 1 ? 's' : ''} scanned — text added to spec below
+                    {specImgFiles.length} image{specImgFiles.length > 1 ? 's' : ''} queued — scanned automatically when you run the pipeline
                   </span>
-                  <button onClick={e => { e.stopPropagation(); setSpecImgFiles([]); setOcrError(''); }}
+                  <button onClick={e => { e.stopPropagation(); setSpecImgFiles([]); }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMute, fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
                 </>
               : <>
@@ -899,17 +878,16 @@ function App() {
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
                   </svg>
-                  <span style={{ fontSize: 11.5, color: specImgDragging ? C.blue : C.textMute }}>{specImgDragging ? 'Drop images to scan' : 'Click or drag photos of your CGP book / spec — text extracted automatically'}</span>
+                  <span style={{ fontSize: 11.5, color: specImgDragging ? C.blue : C.textMute }}>{specImgDragging ? 'Drop images here' : 'Click or drag CGP book / spec photos — scanned when you run the pipeline'}</span>
                 </>
             }
           </div>
-          {ocrError && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{ocrError}</div>}
 
           <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or paste specification text</div>
           <textarea
             value={pastedSpec}
             onChange={e => setPastedSpec(e.target.value)}
-            placeholder="Paste specification text here… (also auto-populated from scanned images above)"
+            placeholder="Paste specification text here… (images above are scanned separately at pipeline run time)"
             style={{
               width: '100%', height: 80, background: C.surface3,
               border: `1px solid ${C.border}`, borderRadius: 8, color: C.text,
