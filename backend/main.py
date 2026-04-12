@@ -355,7 +355,7 @@ Return the improved worksheet only. No commentary or explanations.
     return add_answer_lines(clean_text(response.choices[0].message.content))
 
 
-async def generate_markscheme(text: str, mismatch_info: Optional[str] = None) -> str:
+async def generate_markscheme(text: str, spec_text: str = "", mismatch_info: Optional[str] = None) -> str:
     """Generate a mark scheme from the worksheet text."""
     mismatch_block = ""
     if mismatch_info:
@@ -365,10 +365,21 @@ CRITICAL - SPECIFIC ISSUES TO FIX IN THIS REGENERATION:
 You MUST resolve every issue listed above. Do not reproduce these errors.
 """
 
+    spec_block = ""
+    if spec_text.strip():
+        spec_block = f"""
+SPECIFICATION CONTENT (use this to guide mark scheme answers):
+{spec_text.strip()}
+
+CRITICAL SPEC RULE: Every marking point must be traceable to the specification content above.
+Use the exact terminology, definitions, equations, and values from the specification.
+Do NOT introduce scientific facts, definitions, or values that are not present in the specification.
+"""
+
     prompt = f"""
 You are generating a fully explicit GCSE-style mark scheme from a science worksheet.
 The worksheet may cover Biology, Chemistry, Physics, or combined science — apply the same mark scheme standards for all.
-{mismatch_block}
+{mismatch_block}{spec_block}
 
 CONTENT RULES:
 1. Write a marking entry for EVERY question and EVERY sub-part in the worksheet.
@@ -429,11 +440,22 @@ Question mapping and numbering:
     return clean_text(response.choices[0].message.content)
 
 
-async def improve_markscheme(worksheet_text: str, existing_ms: str) -> str:
+async def improve_markscheme(worksheet_text: str, existing_ms: str, spec_text: str = "") -> str:
     """Improve and validate an uploaded mark scheme against the worksheet."""
-    prompt = """You are reviewing and improving an uploaded GCSE science mark scheme against its worksheet.
-The worksheet may cover Biology, Chemistry, Physics, or combined science — apply the same standards for all subjects.
+    spec_block = ""
+    if spec_text.strip():
+        spec_block = f"""
+SPECIFICATION CONTENT (use this to guide mark scheme answers):
+{spec_text.strip()}
 
+CRITICAL SPEC RULE: Every marking point must be traceable to the specification content above.
+Use the exact terminology, definitions, equations, and values from the specification.
+Do NOT introduce scientific facts or values that are not present in the specification.
+
+"""
+    prompt = f"""You are reviewing and improving an uploaded GCSE science mark scheme against its worksheet.
+The worksheet may cover Biology, Chemistry, Physics, or combined science — apply the same standards for all subjects.
+{spec_block}
 CONTENT RULES:
 1. Keep all correct marking points — do NOT discard good content.
 2. Fix any vague marking points (e.g. "correct answer (1)", "working step (1)") — replace with the actual answer, equation, or value.
@@ -908,10 +930,10 @@ async def process_stream_generator(
     if existing_ms_text.strip():
         # Teacher uploaded their own mark scheme — improve it rather than discard it
         yield f'data: {json.dumps({"step": step, "label": "Improving mark scheme", "detail": "Polishing uploaded mark scheme"})}\n\n'
-        improved_ms = await improve_markscheme(improved_ws, existing_ms_text)
+        improved_ms = await improve_markscheme(improved_ws, existing_ms_text, spec_text=spec_text)
     else:
         yield f'data: {json.dumps({"step": step, "label": "Generating mark scheme", "detail": "Creating marking points"})}\n\n'
-        improved_ms = await generate_markscheme(improved_ws)
+        improved_ms = await generate_markscheme(improved_ws, spec_text=spec_text)
     step += 1
 
     # ── Steps 3-6: Agents 1-4 run IN PARALLEL ────────────────────────────────
@@ -1140,11 +1162,21 @@ async def spec_ocr(file: UploadFile = File(...)):
                         "type": "text",
                         "text": (
                             "This is a page from a GCSE specification document or revision book. "
-                            "Extract ALL the text content accurately, preserving the structure as closely as possible. "
-                            "Include all topic headings, subtopics, bullet points, learning objectives, equations, "
-                            "definitions, and any specification content. "
-                            "Output clean plain text — no markdown formatting, no extra commentary. "
-                            "If there are multiple columns, read them left-to-right."
+                            "Extract ALL the scientific content accurately: topic headings, subtopics, "
+                            "bullet points, learning objectives, equations, definitions, key facts, and values. "
+                            "\n\n"
+                            "IMPORTANT — DO NOT INCLUDE:\n"
+                            "- Topic reference numbers or codes (e.g. '4.1.2', 'P1', 'B2.3', 'C3a', '3.4.1')\n"
+                            "- Chapter numbers, section numbers, or page numbers\n"
+                            "- Exam board codes or specification reference codes\n"
+                            "- Any purely numerical or alphanumerical label that identifies a section rather than describes content\n"
+                            "\n"
+                            "DO INCLUDE everything else: all scientific facts, definitions, equations, "
+                            "topic names (as plain words), and any content a student would need to know.\n"
+                            "\n"
+                            "Output clean plain text only — no markdown, no bullet symbols, no extra commentary. "
+                            "If there are multiple columns, read them left-to-right. "
+                            "Preserve line breaks for separate points."
                         ),
                     },
                     {

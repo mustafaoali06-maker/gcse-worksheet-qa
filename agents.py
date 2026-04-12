@@ -285,16 +285,32 @@ You will be given:
 2. The intended topic scope (raw text from specification).
 
 --------------------------------------------------
+ZERO-TOLERANCE SCOPE RULE
+--------------------------------------------------
+
+If a question, sub-question, or mark scheme point assesses scientific content that is NOT
+explicitly present in the provided specification, it is OUT OF SCOPE — full stop.
+
+This applies regardless of:
+- Whether the content seems relevant or interesting
+- Whether it is correct science
+- Whether it is adjacent to a topic in the spec
+
+"Partially in scope" should only be used when a question is clearly attempting to assess
+a spec topic but uses a slightly different framing or application. If the core assessed
+idea is absent from the spec, the status is "out_of_scope", not "partial".
+
+--------------------------------------------------
 TASK
 --------------------------------------------------
 
-1. Identify which intended topics are assessed.
-2. Identify underrepresented areas.
-3. Identify dominant topics.
-4. Evaluate proportional balance relative to intended scope.
+1. Identify which intended topics from the specification are assessed — be precise.
+2. Identify any topics in the specification that are completely missing from the worksheet.
+3. Flag any questions whose core assessed content is not in the specification.
+4. Evaluate proportional balance relative to the specification scope.
 5. Assess GCSE realism of topic distribution.
-6. For each question (and major sub-question), decide whether its main assessed idea
-   is fully within scope, partially within scope, or out of scope.
+6. For each question (and major sub-question), decide scope status based on the
+   zero-tolerance rule above.
 
 --------------------------------------------------
 OUTPUT FORMAT
@@ -463,6 +479,33 @@ MARK SCHEME RULES
    [Note: accept X instead of Y] on a new line after the relevant mark point.
 
 --------------------------------------------------
+SPECIFICATION-GUIDED CONTENT — CRITICAL
+--------------------------------------------------
+
+When specification content is provided in the input, the following rules apply
+with ZERO EXCEPTIONS:
+
+1. NOTHING NEW MAY BE INTRODUCED that is not present in the specification.
+   Every scientific fact, definition, equation, value, and concept in the final
+   worksheet and mark scheme must be directly traceable to the specification text.
+
+2. USE SPEC TERMINOLOGY EXACTLY. If the specification says "the resistance increases
+   as temperature increases", that phrasing must appear in the mark scheme, not a
+   paraphrase. Do not substitute synonyms if the specification uses specific words.
+
+3. MARK SCHEME ANSWERS MUST MATCH THE SPEC. Every mark point must reflect the
+   exact content the specification describes. If a definition is given in the spec,
+   use that definition — do not write your own version of it.
+
+4. WHEN REWRITING POOR-QUALITY QUESTIONS, draw ONLY from specification content.
+   Do not create new questions around topics, values, or scenarios that are not
+   in the specification.
+
+5. REMOVAL OVER INVENTION. If a question cannot be fixed using specification content,
+   remove it and replace it with a question that is fully within scope — do not
+   fill it with invented content.
+
+--------------------------------------------------
 SCOPE ENFORCEMENT AND MARK THRESHOLD
 --------------------------------------------------
 
@@ -471,7 +514,7 @@ Using the Agent 4 topic-coverage report:
 - REMOVE or REWRITE any question or major sub-question whose main assessed idea is
   clearly "out_of_scope" relative to the intended topic scope.
 - If you rewrite such a question, keep its marks but change the science content so it is
-  fully within scope.
+  fully within scope — using ONLY content from the specification.
 - Do not leave any clearly out-of-scope content in the final worksheet.
 
 After you have removed/re-written out-of-scope material:
@@ -529,6 +572,7 @@ REVISION PRINCIPLES
 - Improve balance.
 - Preserve GCSE authenticity.
 - Maintain structural integrity.
+- Stay strictly within specification scope — when spec is provided, this overrides everything else.
 
 --------------------------------------------------
 OUTPUT FORMAT
