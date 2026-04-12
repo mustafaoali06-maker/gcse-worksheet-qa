@@ -262,13 +262,26 @@ def read_spec_text(
 # ============================================================================
 
 
-async def improve_worksheet(text: str) -> str:
+async def improve_worksheet(text: str, spec_text: str = "") -> str:
     """Improve worksheet quality and formatting using AI."""
-    prompt = """
+    spec_block = ""
+    if spec_text.strip():
+        spec_block = f"""
+SPECIFICATION CONTENT — SCOPE CONSTRAINT (CRITICAL):
+{spec_text.strip()}
+
+You MUST stay strictly within this specification when improving or rewriting questions.
+- Do NOT introduce any scientific fact, equation, definition, or value that is not in the specification above.
+- When rewriting poor-quality questions, draw ONLY from the specification content.
+- When adding application scenarios, base them only on content present in the specification.
+- If a question's topic is not in the specification, rewrite it around a topic that IS.
+
+"""
+    prompt = f"""
 You are improving a GCSE science worksheet to match a professional exam-standard format.
 The worksheet may be for any GCSE science subject: Biology, Chemistry, Physics, or combined science.
 Apply the same standards regardless of subject. Follow these rules EXACTLY:
-
+{spec_block}
 CONTENT RULES:
 1. Make every question clear and unambiguous. Remove AI-sounding or strange wording.
 2. Questions should replicate real GCSE exam questions in style and difficulty.
@@ -353,6 +366,7 @@ Return the improved worksheet only. No commentary or explanations.
         temperature=0,
     )
     return add_answer_lines(clean_text(response.choices[0].message.content))
+
 
 
 async def generate_markscheme(text: str, spec_text: str = "", mismatch_info: Optional[str] = None) -> str:
@@ -923,7 +937,7 @@ async def process_stream_generator(
 
     # ── Step 1: Improve worksheet ─────────────────────────────────────────────
     yield f'data: {json.dumps({"step": step, "label": "Enhancing worksheet", "detail": "Improving quality"})}\n\n'
-    improved_ws = await improve_worksheet(worksheet_text)
+    improved_ws = await improve_worksheet(worksheet_text, spec_text=spec_text)
     step += 1
 
     # ── Step 2: Build / improve mark scheme ───────────────────────────────────
@@ -1063,13 +1077,26 @@ async def chat_endpoint(request: Request):
     message = body.get("message", "")
     worksheet = body.get("worksheet", "")
     markscheme = body.get("markscheme", "")
+    spec = body.get("spec", "").strip()
     # History: list of {role, text} — cap at last 10 messages to control token usage
     history = body.get("history", [])[-10:]
 
-    system_prompt = """You are an AI assistant helping a teacher edit a GCSE science worksheet and mark scheme.
+    spec_rule = ""
+    if spec:
+        spec_rule = f"""
+SPECIFICATION CONTENT — APPLIES TO EVERY EDIT:
+{spec}
+
+CRITICAL SPEC RULE: Every scientific fact, definition, equation, and value you introduce
+must be present in the specification above. Do NOT add content outside this specification,
+even if it seems correct or relevant. If an instruction would require introducing off-spec
+content, explain why and suggest a spec-compliant alternative instead.
+"""
+
+    system_prompt = f"""You are an AI assistant helping a teacher edit a GCSE science worksheet and mark scheme.
 The worksheet may cover any GCSE science subject: Biology, Chemistry, Physics, or combined science.
 Apply the same exam standards regardless of the specific science subject.
-
+{spec_rule}
 You have access to the conversation history so you can refer back to earlier requests (e.g. "undo that", "change it to 5 marks instead").
 
 Rules:

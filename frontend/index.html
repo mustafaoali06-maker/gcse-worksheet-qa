@@ -732,7 +732,7 @@ function App() {
     try {
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, worksheet, markscheme, history: chatMsgs }),
+        body: JSON.stringify({ message: text, worksheet, markscheme, history: chatMsgs, spec: pastedSpec }),
       });
       const data = await res.json();
       setChatMsgs(prev => [...prev, { role: 'assistant', text: data.reply }]);
