@@ -913,63 +913,163 @@ def build_markscheme_docx(markscheme_text: str) -> BytesIO:
 # ============================================================================
 
 
-def _count_agent_issues(r1: str, r2: str, r3: str, r4: str) -> dict:
-    """Parse agent JSON reports and count meaningful issues flagged."""
-    counts = {"command_word": 0, "mark_scheme": 0, "cognitive": 0, "coverage": 0, "total": 0}
+def _truthy(v) -> bool:
+    """Return True if v represents a meaningful non-zero/non-false value."""
+    if v is None: return False
+    if isinstance(v, bool): return v
+    if isinstance(v, (int, float)): return v > 0
+    s = str(v).strip().lower()
+    return s not in ("", "0", "false", "none", "no", "n/a", "na", "null")
 
-    # Agent 1 — command words / interrogative phrasing
+
+def _count_agent_issues(r1: str, r2: str, r3: str, r4: str) -> dict:
+    """
+    Parse all four agent JSON reports and return counts plus a flat list of
+    human-readable insight strings for the Pipeline Insights panel.
+    Each insight has: {text: str, level: "fix"|"warn"|"info"}
+    """
+    counts = {"command_word": 0, "mark_scheme": 0, "cognitive": 0, "coverage": 0, "total": 0}
+    insights = []   # list of {text, level}
+
+    # ── Agent 1 — command words & interrogative phrasing ─────────────────────
     try:
         d = json.loads(r1)
+        interrogative, under, over, missing = 0, 0, 0, 0
         for q in d.get("question_analysis", []):
-            status = q.get("alignment_status", "ok")
-            if status != "ok" or q.get("is_interrogative"):
-                counts["command_word"] += 1
+            st = q.get("alignment_status", "ok")
+            if q.get("is_interrogative") or st == "interrogative":
+                interrogative += 1
+            elif st == "under_rewarded":
+                under += 1
+            elif st == "over_rewarded":
+                over += 1
+            elif st == "missing":
+                missing += 1
+        counts["command_word"] = interrogative + under + over + missing
+        if interrogative:
+            insights.append({"text": f"{interrogative} question{'s' if interrogative>1 else ''} used interrogative phrasing (What/Why/How) instead of a command word — reworded", "level": "fix"})
+        if missing:
+            insights.append({"text": f"{missing} question instruction{'s' if missing>1 else ''} had no command word — added", "level": "fix"})
+        if under:
+            insights.append({"text": f"{under} question{'s' if under>1 else ''} under-rewarded for cognitive demand (e.g. Explain worth only 1 mark)", "level": "warn"})
+        if over:
+            insights.append({"text": f"{over} question{'s' if over>1 else ''} over-rewarded for cognitive demand (e.g. State worth 4+ marks)", "level": "warn"})
     except Exception:
         pass
 
-    # Agent 2 — mark scheme structural violations
+    # ── Agent 2 — mark scheme structural violations ───────────────────────────
     try:
         d = json.loads(r2)
         viol = d.get("summary", {}).get("rule_violations", {})
-        for k, v in viol.items():
-            if v and str(v).strip().lower() not in ("0", "false", "none", ""):
-                counts["mark_scheme"] += 1
-        for q in d.get("question_analysis", []):
-            if q.get("structure_alignment") == "mismatch":
-                counts["mark_scheme"] += 1
+
+        gran  = viol.get("granularity_errors", "")
+        fmt   = viol.get("total_line_format_errors", "")
+        paper = viol.get("paper_total_missing", False)
+        vague = viol.get("vague_marking_points", "")
+        caps  = viol.get("capitalisation_errors", "")
+        anyx  = viol.get("any_x_from_errors", "")
+
+        # count mark-mismatches from per-question analysis
+        mismatch = sum(1 for q in d.get("question_analysis", []) if q.get("structure_alignment") == "mismatch")
+
+        if _truthy(gran):
+            insights.append({"text": f"Mark granularity errors found — individual marks were grouped as (2) or (3) instead of separate (1)s", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if _truthy(fmt):
+            insights.append({"text": "Question totals used '=' instead of 'is' — corrected to exam board format", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if _truthy(paper):
+            insights.append({"text": "Paper total mark line was missing from mark scheme — added", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if _truthy(vague):
+            insights.append({"text": "Vague marking points found (e.g. 'correct answer (1)') — replaced with explicit expected answers", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if _truthy(caps):
+            insights.append({"text": "Capitalisation inconsistencies in mark scheme — only first letter of each point should be capitalised", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if _truthy(anyx):
+            insights.append({"text": "'Any X from:' format was missing or malformed — standardised", "level": "fix"})
+            counts["mark_scheme"] += 1
+        if mismatch:
+            insights.append({"text": f"{mismatch} question{'s' if mismatch>1 else ''} had mark totals that didn't match the number of (1) mark labels", "level": "fix"})
+            counts["mark_scheme"] += mismatch
+
+        calc_q = d.get("summary", {}).get("calculation_marking_quality", "")
+        if calc_q and any(w in calc_q.lower() for w in ("poor", "issue", "error", "wrong", "incorrect")):
+            insights.append({"text": "Calculation marking quality flagged — marks were awarded for writing equations rather than substitution/answer", "level": "fix"})
+            counts["mark_scheme"] += 1
     except Exception:
         pass
 
-    # Agent 3 — cognitive balance / authenticity
+    # ── Agent 3 — cognitive balance & GCSE authenticity ──────────────────────
     try:
         d = json.loads(r3)
-        for k, v in d.get("balance_flags", {}).items():
-            if k != "skew_description" and v:
-                counts["cognitive"] += 1
-        for q in d.get("question_analysis", []):
-            if q.get("flags") or not q.get("difficulty_appropriate", True):
-                counts["cognitive"] += 1
+        bf = d.get("balance_flags", {})
         auth = d.get("authenticity_issues", {})
+        rating = d.get("overall_quality_rating", "")
+        dist = d.get("mark_distribution", {})
+
+        if bf.get("too_much_recall"):
+            pct = dist.get("recall_pct", "")
+            insights.append({"text": f"Paper was recall-heavy{' (' + str(pct) + ')' if pct else ''} — cognitive balance adjusted toward explain/application questions", "level": "fix"})
+            counts["cognitive"] += 1
+        if bf.get("no_calculations"):
+            insights.append({"text": "No calculation questions detected — paper lacked procedural skills assessment", "level": "warn"})
+            counts["cognitive"] += 1
+        if bf.get("no_causal_or_extended"):
+            insights.append({"text": "No causal or extended-response questions — paper was missing higher-order thinking", "level": "warn"})
+            counts["cognitive"] += 1
+        if bf.get("heavy_skew_detected"):
+            skew = bf.get("skew_description", "")
+            insights.append({"text": f"Cognitive skew detected{': ' + skew if skew else ''}", "level": "warn"})
+            counts["cognitive"] += 1
+
         if not auth.get("difficulty_gradient_ok", True):
+            insights.append({"text": "Difficulty gradient broken — hard questions appeared before easier ones; reordered", "level": "fix"})
             counts["cognitive"] += 1
-        if auth.get("mark_cognitive_mismatches"):
+
+        ai_lang = auth.get("ai_sounding_language_found", "")
+        if _truthy(ai_lang):
+            insights.append({"text": f"AI-generated phrasing detected (e.g. 'delve into', 'fascinating') — replaced with natural exam language", "level": "fix"})
             counts["cognitive"] += 1
-        if auth.get("ai_sounding_language_found"):
+
+        mismatches = auth.get("mark_cognitive_mismatches", "")
+        if _truthy(mismatches):
+            insights.append({"text": "Mark–cognitive mismatches found (e.g. Recall question worth 4 marks, Explain worth 1)", "level": "fix"})
             counts["cognitive"] += 1
+
+        scenario_q = auth.get("scenario_quality_issues", "")
+        if _truthy(scenario_q):
+            insights.append({"text": "Named-scenario questions had unrealistic or physically incoherent setups — corrected", "level": "fix"})
+            counts["cognitive"] += 1
+
+        if rating in ("poor", "fair"):
+            insights.append({"text": f"Overall cognitive quality rated '{rating}' before revision — significant structural improvements applied", "level": "info"})
     except Exception:
         pass
 
-    # Agent 4 — topic coverage / out-of-scope
+    # ── Agent 4 — topic coverage / spec scope ────────────────────────────────
     try:
         d = json.loads(r4)
-        for q in d.get("per_question", []):
-            if q.get("scope_status", "in_scope") != "in_scope":
-                counts["coverage"] += 1
+        out_of_scope = [q for q in d.get("per_question", []) if q.get("scope_status", "in_scope") != "in_scope"]
+        counts["coverage"] = len(out_of_scope)
+        if out_of_scope:
+            qids = ", ".join(q.get("question_id", "?") for q in out_of_scope[:4])
+            extra = f" (and {len(out_of_scope)-4} more)" if len(out_of_scope) > 4 else ""
+            insights.append({"text": f"{len(out_of_scope)} question{'s' if len(out_of_scope)>1 else ''} outside the specification removed or rewritten — Q{qids}{extra}", "level": "fix"})
+
+        gaps = d.get("coverage_gaps", "")
+        if _truthy(gaps) and len(str(gaps)) > 5:
+            insights.append({"text": f"Spec topics not covered by the worksheet: {gaps}", "level": "info"})
+
+        overrep = d.get("overrepresented_topics", "")
+        if _truthy(overrep) and len(str(overrep)) > 5:
+            insights.append({"text": f"Overrepresented topics: {overrep}", "level": "info"})
     except Exception:
         pass
 
     counts["total"] = counts["command_word"] + counts["mark_scheme"] + counts["cognitive"] + counts["coverage"]
-    return counts
+    return {**counts, "_insights": insights}
 
 
 async def process_stream_generator(
