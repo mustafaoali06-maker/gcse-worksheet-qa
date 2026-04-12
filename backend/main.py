@@ -265,8 +265,9 @@ def read_spec_text(
 async def improve_worksheet(text: str) -> str:
     """Improve worksheet quality and formatting using AI."""
     prompt = """
-You are improving a GCSE worksheet to match a professional exam-standard format.
-Follow these rules EXACTLY:
+You are improving a GCSE science worksheet to match a professional exam-standard format.
+The worksheet may be for any GCSE science subject: Biology, Chemistry, Physics, or combined science.
+Apply the same standards regardless of subject. Follow these rules EXACTLY:
 
 CONTENT RULES:
 1. Make every question clear and unambiguous. Remove AI-sounding or strange wording.
@@ -325,11 +326,20 @@ FORMATTING RULES:
 17. Keep mark allocations exactly as shown, e.g. (2).
 18. Ensure there is NO space between sub-parts (a), (b), (c) of the SAME question.
 19. There SHOULD be a blank line between separate main questions (1, 2, 3...).
-20. Do NOT completely rewrite questions - only improve clarity and GCSE realism.
+20. REWRITE PERMISSION: If a question is clearly of poor quality — contains vague wording, is not GCSE-appropriate, uses interrogative phrasing throughout, or cannot be fixed with minor edits — you MUST rewrite it substantially to produce a high-quality GCSE question. Do not preserve poor-quality content for the sake of preservation. Clarity, GCSE realism, and exam authenticity always take priority.
 21. If a question has sub-parts (a)(i), (a)(ii), the letter (a) alone should NOT be on its own line
     if it only introduces roman-numeral sub-parts. Use the format:
     (a) (i) question text here   (1)
         (ii) question text here  (2)
+
+IMAGE PLACEHOLDERS:
+22. If a question references a diagram, figure, graph, or image, do NOT describe it inline.
+    Insert a placeholder on its own line in exactly this format:
+        [Image: <description of what the image/diagram should show>]
+    The description must be specific enough that a teacher can source or draw the correct image.
+    - CORRECT: [Image: Diagram showing a root hair cell with a large vacuole and thin cell wall]
+    - WRONG: [Image: diagram here]
+    Placeholders are rendered as visual boxes in the preview and replaced manually when printing.
 
 OUTPUT:
 Return the improved worksheet only. No commentary or explanations.
@@ -356,7 +366,8 @@ You MUST resolve every issue listed above. Do not reproduce these errors.
 """
 
     prompt = f"""
-You are generating a fully explicit GCSE-style mark scheme from a worksheet.
+You are generating a fully explicit GCSE-style mark scheme from a science worksheet.
+The worksheet may cover Biology, Chemistry, Physics, or combined science — apply the same mark scheme standards for all.
 {mismatch_block}
 
 CONTENT RULES:
@@ -420,7 +431,8 @@ Question mapping and numbering:
 
 async def improve_markscheme(worksheet_text: str, existing_ms: str) -> str:
     """Improve and validate an uploaded mark scheme against the worksheet."""
-    prompt = """You are reviewing and improving an uploaded GCSE mark scheme against its worksheet.
+    prompt = """You are reviewing and improving an uploaded GCSE science mark scheme against its worksheet.
+The worksheet may cover Biology, Chemistry, Physics, or combined science — apply the same standards for all subjects.
 
 CONTENT RULES:
 1. Keep all correct marking points — do NOT discard good content.
@@ -1025,7 +1037,9 @@ async def chat_endpoint(request: Request):
     # History: list of {role, text} — cap at last 10 messages to control token usage
     history = body.get("history", [])[-10:]
 
-    system_prompt = """You are an AI assistant helping a teacher edit a GCSE physics worksheet and mark scheme.
+    system_prompt = """You are an AI assistant helping a teacher edit a GCSE science worksheet and mark scheme.
+The worksheet may cover any GCSE science subject: Biology, Chemistry, Physics, or combined science.
+Apply the same exam standards regardless of the specific science subject.
 
 You have access to the conversation history so you can refer back to earlier requests (e.g. "undo that", "change it to 5 marks instead").
 

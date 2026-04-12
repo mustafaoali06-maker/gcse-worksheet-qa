@@ -173,31 +173,63 @@ No commentary outside JSON.
 
 
 AGENT_3_PROMPT = """
-You are Agent 3: Cognitive Balance Evaluator.
+You are Agent 3: Cognitive Balance & Exam Realism Evaluator.
 
-Your role is to evaluate cognitive demand distribution and exam realism.
+Your role is to evaluate cognitive demand distribution per question, assess paper-wide balance, and flag any questions that are unrealistic for GCSE science.
 
 --------------------------------------------------
 Cognitive Categories
 --------------------------------------------------
 
-Recall – definitions, stating facts.
-Procedural – calculations and equation use.
-Low-level explanation – describing processes.
-Causal reasoning – linked explanations using because/therefore logic.
+1. Recall       – State, Name, Give, Identify a fact or term. Typically 1 mark.
+2. Procedural   – Calculate, Determine, Show that. Equation + substitution + answer.
+3. Descriptive  – Describe a process, sequence or feature. Typically 2–3 marks.
+4. Causal       – Explain using because/therefore logic. Typically 3–4 marks.
+5. Application  – Suggest, Evaluate, Predict in an unfamiliar context. Typically 2–4 marks.
+6. Extended     – Multi-step causal or evaluative questions. Typically 4–6 marks.
+
+--------------------------------------------------
+TARGET BALANCE FOR A GCSE SCIENCE PAPER
+--------------------------------------------------
+
+A well-balanced paper should have approximately:
+  - 20–30% Recall
+  - 15–25% Procedural
+  - 15–20% Descriptive
+  - 25–35% Causal
+  - 10–20% Application / Extended
+
+Flag papers that are heavily skewed toward any single category.
+Flag if there are NO procedural questions (calculations).
+Flag if there are NO causal/extended questions.
+Flag if more than 50% of marks are Recall.
+
+--------------------------------------------------
+GCSE AUTHENTICITY CHECKS
+--------------------------------------------------
+
+For each question, also check:
+A. DIFFICULTY GRADIENT: Does the paper build from easier recall at the start to harder causal/application
+   questions toward the end? Flag if hard questions appear unexpectedly early.
+B. MARK-COGNITIVE MISMATCH: Flag questions where the cognitive demand doesn't match the marks.
+   - A "Recall" question worth 4+ marks is suspicious.
+   - A "Causal" question worth only 1 mark is suspicious.
+C. REPETITION: Flag if the same cognitive type appears more than 3 times in a row.
+D. AI-SOUNDING LANGUAGE: Flag any question that uses vague, AI-generated phrasing
+   (e.g. "delve into", "fascinating", "intricate", "it is important to note", "in conclusion").
+E. SCENARIO QUALITY: Flag if named-scenario questions (e.g. "Priya investigates...") use
+   unrealistic or physically incoherent setups.
 
 --------------------------------------------------
 TASK
 --------------------------------------------------
 
-1. Categorise each question.
-2. Estimate overall distribution of cognitive demand.
-3. Evaluate:
-   - Over-reliance on procedural calculations
-   - Under-rewarded reasoning
-   - Insufficient extended explanation
-4. Assess GCSE authenticity relative to exam-board style.
-5. Identify cognitive imbalance risks.
+1. Categorise EVERY question and sub-part into one of the 6 cognitive categories.
+2. Count marks per category and compute percentage distribution.
+3. Check balance against the target ranges.
+4. Run all GCSE authenticity checks A–E above.
+5. Produce a per-question flag list for Agent 5 to act on.
+6. Give an overall quality verdict.
 
 --------------------------------------------------
 OUTPUT FORMAT
@@ -206,12 +238,39 @@ OUTPUT FORMAT
 Return structured JSON only:
 
 {
-  "overall_quality_rating": "...",
-  "strengths": "...",
+  "mark_distribution": {
+    "recall_pct": "...",
+    "procedural_pct": "...",
+    "descriptive_pct": "...",
+    "causal_pct": "...",
+    "application_pct": "...",
+    "extended_pct": "..."
+  },
+  "balance_flags": {
+    "too_much_recall": false,
+    "no_calculations": false,
+    "no_causal_or_extended": false,
+    "heavy_skew_detected": false,
+    "skew_description": "..."
+  },
+  "question_analysis": [
+    {
+      "question_id": "...",
+      "cognitive_category": "Recall | Procedural | Descriptive | Causal | Application | Extended",
+      "marks": "...",
+      "difficulty_appropriate": true,
+      "flags": "..."
+    }
+  ],
+  "authenticity_issues": {
+    "difficulty_gradient_ok": true,
+    "mark_cognitive_mismatches": "...",
+    "ai_sounding_language_found": "...",
+    "scenario_quality_issues": "..."
+  },
+  "overall_quality_rating": "poor | fair | good | excellent",
   "key_risks": "...",
-  "cognitive_balance_comment": "...",
-  "exam_realism_comment": "...",
-  "final_verdict": "..."
+  "recommendations_for_agent_5": "..."
 }
 
 No commentary outside JSON.
@@ -283,6 +342,9 @@ You may:
 - Refine marking points.
 - Restructure extended responses if necessary.
 - Correct structural weaknesses.
+- FULLY REWRITE questions that are of poor quality, use interrogative phrasing throughout,
+  contain vague or AI-generated wording, or cannot be salvaged with minor edits.
+  Prioritise exam quality over preservation of the original text.
 
 --------------------------------------------------
 MANDATORY CONSISTENCY CHECKS
@@ -294,7 +356,7 @@ Before finalising, you MUST ensure:
 2. All constants used in calculations are explicitly provided.
 3. If narrative implies energy conservation or linked processes, magnitudes must be physically coherent.
 4. Units are correct and realistic.
-5. No physics contradictions exist.
+5. No scientific contradictions exist.
 6. Total marks in the worksheet MUST exactly match total marks in the mark scheme for every single question and sub-question. Double-check every question individually.
 7. Revised version stays within intended topic scope.
 
@@ -343,6 +405,16 @@ QUESTION WRITING RULES
 5. NO TOPIC HEADERS: Do not include topic headers like "Work and Energy Transfers" — only clean question structures.
 
 6. NO STRANGE AI WORDING: Every sentence should read naturally as a real GCSE exam question.
+
+7. IMAGE PLACEHOLDERS: If a question references a diagram, figure, graph, or image:
+   - Do NOT describe the image inline or skip it.
+   - Insert a placeholder on its own line in exactly this format:
+       [Image: <concise description of what the image/diagram should show>]
+   - The description must be specific enough for a teacher to source or draw the correct image.
+   - CORRECT: [Image: Diagram showing a ray of light refracting at a glass-air boundary, with labelled angles of incidence and refraction]
+   - CORRECT: [Image: Graph of velocity against time for a car decelerating from 20 m/s to rest over 5 seconds]
+   - WRONG: [Image: diagram here] — too vague.
+   - Image placeholders will be rendered as dashed boxes in the preview and must be replaced manually when exporting to .docx.
 
 --------------------------------------------------
 MARK SCHEME RULES
@@ -398,7 +470,7 @@ Using the Agent 4 topic-coverage report:
 
 - REMOVE or REWRITE any question or major sub-question whose main assessed idea is
   clearly "out_of_scope" relative to the intended topic scope.
-- If you rewrite such a question, keep its marks but change the physics so it is
+- If you rewrite such a question, keep its marks but change the science content so it is
   fully within scope.
 - Do not leave any clearly out-of-scope content in the final worksheet.
 
@@ -409,7 +481,7 @@ After you have removed/re-written out-of-scope material:
   or sub-questions so that the total reaches AT LEAST 20 marks.
 - Any new questions you add must:
   - Stay strictly within the intended scope.
-  - Be realistic GCSE Physics questions.
+  - Be realistic GCSE science questions.
   - Have matching, fully detailed entries in the mark scheme.
 
 --------------------------------------------------
@@ -444,6 +516,7 @@ Do NOT:
 - Inflate total marks excessively.
 - Remove core assessed skills.
 - Rewrite purely stylistically without justification.
+- Preserve poor-quality questions when a full rewrite is clearly necessary.
 - Write long, over-explained mark scheme answers.
 - Use "=" or "-" as separators in mark scheme lines; use ":" instead where needed.
 
