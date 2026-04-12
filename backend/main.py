@@ -1049,6 +1049,8 @@ def _count_agent_issues(r1: str, r2: str, r3: str, r4: str) -> dict:
         pass
 
     # ── Agent 4 — topic coverage / spec scope ────────────────────────────────
+    if r4.strip().startswith("No specification"):
+        insights.append({"text": "No specification provided — topic coverage evaluation skipped (upload CGP pages or paste spec text to enable)", "level": "info"})
     try:
         d = json.loads(r4)
         out_of_scope = [q for q in d.get("per_question", []) if q.get("scope_status", "in_scope") != "in_scope"]
