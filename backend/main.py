@@ -53,7 +53,7 @@ async_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 _export_cache: dict = {}
 
 ANSWER_LINE = "_____________________________________________________________________________"
-ANSWER_UNDERSCORES = {0: 79, 1: 76, 2: 72}
+ANSWER_UNDERSCORES = {0: 79, 1: 76, 2: 73}
 LABEL_CM = [0.0, 0.63, 1.27]
 TEXT_CM = [0.7, 1.27, 1.90]
 
@@ -686,20 +686,27 @@ def build_formatted_docx(spec: dict) -> BytesIO:
         question_text = _CMD_SPLIT_D.sub(lambda m: "\n" + m.group(0).lstrip(), question_text)
         _qt_parts = [s for s in question_text.split("\n") if s.strip()]
 
-        # First paragraph — label + first part of question text
-        qp = _para(space_before_pt=sp, space_after_pt=0, left_cm=_left_cm, hanging_cm=_hang_cm)
-        if label:
-            r_lbl = qp.add_run(label + "  ")
-            _set_run_font(r_lbl, bold=label_bold)
-        if _qt_parts:
-            r_txt = qp.add_run(_qt_parts[0])
-            _set_run_font(r_txt, bold=False)
+        _txt_cm = TEXT_CM[min(_eff_indent, 2)]
 
-        # Continuation paragraphs (command word lines)
-        for _qtp in _qt_parts[1:]:
-            cp = _para(space_before_pt=0, space_after_pt=0, left_cm=TEXT_CM[min(_eff_indent, 2)])
-            r_cp = cp.add_run(_qtp)
-            _set_run_font(r_cp, bold=False)
+        if len(_qt_parts) > 1:
+            # Context line(s) first (no label), then label + command on the last line.
+            # This puts "(b)" next to "Evaluate this statement." not next to the context sentence.
+            for _ci, _ctx in enumerate(_qt_parts[:-1]):
+                _ctx_sp = sp if _ci == 0 else 0
+                _cp = _para(space_before_pt=_ctx_sp, space_after_pt=0, left_cm=_txt_cm)
+                _set_run_font(_cp.add_run(_ctx), bold=False)
+            # Label + instruction paragraph
+            qp = _para(space_before_pt=0, space_after_pt=0, left_cm=_left_cm, hanging_cm=_hang_cm)
+            if label:
+                _set_run_font(qp.add_run(label + "  "), bold=label_bold)
+            _set_run_font(qp.add_run(_qt_parts[-1]), bold=False)
+        else:
+            # Single part — label + text together as before
+            qp = _para(space_before_pt=sp, space_after_pt=0, left_cm=_left_cm, hanging_cm=_hang_cm)
+            if label:
+                _set_run_font(qp.add_run(label + "  "), bold=label_bold)
+            if _qt_parts:
+                _set_run_font(qp.add_run(_qt_parts[0]), bold=False)
 
         # Answer lines (underscore text)
         if marks and marks > 0:
@@ -1103,6 +1110,57 @@ CURRENT MARK SCHEME:
         "updated_worksheet": updated_ws,
         "updated_markscheme": updated_ms,
     }
+
+
+@app.post("/api/spec-ocr")
+async def spec_ocr(file: UploadFile = File(...)):
+    """
+    Extract specification text from an uploaded image (e.g. a photo of a CGP book page).
+    Uses GPT-4o vision to accurately read and structure the content.
+    Accepts: image/jpeg, image/png, image/webp, image/gif
+    Returns: {"text": str}
+    """
+    contents = await file.read()
+
+    # Detect MIME type from filename extension; default to jpeg
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "webp": "image/webp", "gif": "image/gif"}
+    mime = mime_map.get(ext, "image/jpeg")
+
+    b64 = base64.b64encode(contents).decode()
+
+    response = await async_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "This is a page from a GCSE specification document or revision book. "
+                            "Extract ALL the text content accurately, preserving the structure as closely as possible. "
+                            "Include all topic headings, subtopics, bullet points, learning objectives, equations, "
+                            "definitions, and any specification content. "
+                            "Output clean plain text — no markdown formatting, no extra commentary. "
+                            "If there are multiple columns, read them left-to-right."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime};base64,{b64}",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            }
+        ],
+        max_tokens=4096,
+    )
+    extracted = response.choices[0].message.content.strip()
+    return {"text": extracted}
 
 
 @app.get("/logo.png")

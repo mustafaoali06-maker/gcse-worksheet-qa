@@ -547,6 +547,9 @@ function App() {
   const [specTxtFile, setSpecTxt] = useState(null);
   const [specDocxFile, setSpecDocx] = useState(null);
   const [pastedSpec, setPastedSpec] = useState('');
+  const [specImgFile, setSpecImgFile] = useState(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState('');
 
   // Pipeline state
   const [running, setRunning]       = useState(false);
@@ -598,6 +601,25 @@ function App() {
     setChatMsgs([]); setChatInput(''); setChatLoading(false);
     setError('');
     // UploadZone components own their own inputs and clear them internally
+  };
+
+  // ── Spec image OCR ───────────────────────────────────────────────────────
+  const runSpecOcr = async (imgFile) => {
+    if (!imgFile) return;
+    setOcrLoading(true);
+    setOcrError('');
+    try {
+      const form = new FormData();
+      form.append('file', imgFile);
+      const res = await fetch(`${API}/api/spec-ocr`, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+      setPastedSpec(prev => prev ? prev + '\n\n' + data.text : data.text);
+    } catch (e) {
+      setOcrError('Could not read image — please try again or paste the text manually.');
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   // ── Run pipeline ─────────────────────────────────────────────────────────
@@ -780,11 +802,49 @@ function App() {
             onFile={(f) => setSpecDocx(f)}
             onClear={() => setSpecDocx(null)} />
 
+          {/* Scan image from book */}
+          <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or scan a book / spec page image</div>
+          <div style={{
+            border: `1.5px dashed ${specImgFile ? C.green : C.border}`,
+            borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
+            background: specImgFile ? 'rgba(34,197,94,0.06)' : C.surface3,
+            display: 'flex', alignItems: 'center', gap: 10,
+            transition: 'all 0.15s',
+          }}
+            onClick={() => { if (!specImgFile && !ocrLoading) document.getElementById('spec-img-input').click(); }}
+          >
+            <input id="spec-img-input" type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => {
+                const f = e.target.files[0];
+                if (f) { setSpecImgFile(f); setOcrError(''); runSpecOcr(f); }
+                e.target.value = '';
+              }}
+            />
+            {ocrLoading
+              ? <><Spinner size={14} /><span style={{ fontSize: 11.5, color: C.textMid }}>Reading image…</span></>
+              : specImgFile
+              ? <>
+                  <Icon name="checkcircle" size={15} color={C.green} />
+                  <span style={{ fontSize: 11.5, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{specImgFile.name}</span>
+                  <button onClick={e => { e.stopPropagation(); setSpecImgFile(null); setOcrError(''); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMute, fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
+                </>
+              : <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.textMute} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <span style={{ fontSize: 11.5, color: C.textMute }}>Upload photo of CGP book or spec — text extracted automatically</span>
+                </>
+            }
+          </div>
+          {ocrError && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{ocrError}</div>}
+
           <div style={{ fontSize: '0.68rem', color: C.textMute, margin: '10px 0 4px', fontWeight: 500 }}>Or paste specification text</div>
           <textarea
             value={pastedSpec}
             onChange={e => setPastedSpec(e.target.value)}
-            placeholder="Paste specification text here…"
+            placeholder="Paste specification text here… (also auto-populated from scanned images above)"
             style={{
               width: '100%', height: 80, background: C.surface3,
               border: `1px solid ${C.border}`, borderRadius: 8, color: C.text,
