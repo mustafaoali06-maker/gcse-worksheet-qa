@@ -612,16 +612,28 @@ UNDERSTANDING THE STRUCTURE
 
 2. Lettered sub-parts: (a), (b), (c), ...
    - These appear under a main question number.
-   - IMPORTANT: If a lettered sub-part (a) contains roman numeral sub-sub-parts (i), (ii), (iii)...
-     then (a) should NOT appear as a standalone line. Instead:
-     - The first roman sub-part gets a combined label: "(a) (i)"
-     - Subsequent roman sub-parts get just: "(ii)", "(iii)" etc.
-     - This is the standard GCSE exam layout for nested sub-parts.
+   - TWO cases — choose based on whether the letter has its own context sentence:
+
+   CASE A — (b) has NO standalone context sentence (goes straight to sub-parts):
+     - Do NOT emit a standalone (b) line.
+     - First roman sub-part gets a combined label at indent_level 1: "(b) (i)"
+     - All subsequent roman sub-parts get plain roman labels at indent_level 2: "(ii)", "(iii)" etc.
+     Example:
+       {part_label: "(b) (i)", indent_level: 1, question_text: "its charge"}
+       {subpart_label: "(ii)", indent_level: 2, question_text: "its penetrating ability"}
+
+   CASE B — (b) HAS its own context sentence (introduces the roman sub-parts):
+     - Emit a standalone (b) line at indent_level 1 with the context text.
+     - All roman sub-parts get PLAIN roman labels only at indent_level 2 — NO "(b)" prefix.
+     - NEVER emit "(b) (i)", "(b) (ii)" etc. when a standalone (b) line already exists.
+     Example:
+       {part_label: "(b)", indent_level: 1, question_text: "State the charge and relative mass of:"}
+       {subpart_label: "(i)", indent_level: 2, question_text: "a proton"}
+       {subpart_label: "(ii)", indent_level: 2, question_text: "a neutron"}
 
 3. Roman numeral sub-parts: (i), (ii), (iii), ...
-   - Appear under lettered sub-parts.
-   - ONLY appear as standalone if their parent (a)/(b) is a standalone question
-     (i.e. the (a)/(b) has its own question text AND ALSO has (i)/(ii) sub-parts).
+   - Use subpart_label field (not part_label) for plain roman labels at indent_level 2.
+   - NEVER repeat the parent letter in a roman label when a standalone parent line already exists.
 
 4. "Total for question X = Y marks" lines.
    CRITICAL: Each "Total for question" line MUST appear IMMEDIATELY after the last
