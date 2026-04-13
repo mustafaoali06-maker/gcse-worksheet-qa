@@ -617,7 +617,9 @@ def build_formatted_docx(spec: dict) -> BytesIO:
     last_q = None
     prev_indent = None
     _COMB_RE_D = re.compile(r"^\(([a-z])\) \(([ivxlcdm]+)\)$", re.IGNORECASE)
-    _seen_roman_d: dict = {}
+    _PLAIN_PART_RE_D = re.compile(r"^\(([a-z])\)$", re.IGNORECASE)
+    _seen_roman_d: dict = {}      # tracks parent letters seen inside combined "(b) (i)" labels
+    _seen_plain_parts_d: dict = {}  # tracks plain "(b)" context labels already rendered
     _orphan_qnum_d = None
 
     def _para(space_before_pt=0, space_after_pt=0, left_cm=0.0, hanging_cm=0.0, align=WD_ALIGN_PARAGRAPH.LEFT):
@@ -672,14 +674,27 @@ def build_formatted_docx(spec: dict) -> BytesIO:
         if indent_level == 1:
             _mcd = _COMB_RE_D.match(part_label)
             if _mcd:
-                _parent_d = _mcd.group(1)
+                _parent_d = _mcd.group(1).lower()
                 _roman_d = _mcd.group(2)
                 _seen_roman_d.setdefault(qnum, set())
-                if _parent_d in _seen_roman_d[qnum]:
+                # Strip parent letter if: (a) we've already seen it in a previous
+                # combined label, OR (b) a standalone "(b)" context line was
+                # already rendered — avoids "(b) (i)" when "(b)" is on its own line.
+                _parent_shown = (
+                    _parent_d in _seen_roman_d[qnum]
+                    or _parent_d in _seen_plain_parts_d.get(qnum, set())
+                )
+                if _parent_shown:
                     _eff_indent = 2
                     _eff_part = f"({_roman_d})"
                 else:
                     _seen_roman_d[qnum].add(_parent_d)
+            else:
+                # Plain "(b)" label — record it so subsequent "(b) (i)" lines
+                # can strip the redundant parent letter.
+                _pm = _PLAIN_PART_RE_D.match(part_label)
+                if _pm:
+                    _seen_plain_parts_d.setdefault(qnum, set()).add(_pm.group(1).lower())
 
         # Merge orphan question number
         _ans_lvl_d = _eff_indent
